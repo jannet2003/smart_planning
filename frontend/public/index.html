@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartPlanning Radiologie — Plateforme Unifiée CHU Monastir V2.6</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Feuille de style -->
+  <link rel="stylesheet" href="/css/style.css">
+
+  <!-- Librairie XLSX (pour l'import Excel) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header class="app-header">
+    <div class="logo-mark">
+      <div class="cross"></div>
+    </div>
+    <div class="brand-text">
+      <div class="name">SmartPlanning</div>
+      <div class="sub">Radiologie · CHU Monastir V2.6</div>
+    </div>
+    <div class="header-stats">
+      <div class="header-stat"><div class="n" id="statSeniors">0</div><div class="l">Seniors</div></div>
+      <div class="header-stat"><div class="n" id="statResidents">0</div><div class="l">Résidents</div></div>
+      <div class="header-stat"><div class="n" id="statTechs">0</div><div class="l">Techniciens</div></div>
+      <div class="header-stat"><div class="n" id="statFeries" style="color:var(--amber)">0</div><div class="l">Jours Fériés</div></div>
+      <div class="header-stat"><div class="n" id="statAlert" style="color:var(--red)">0</div><div class="l">Absences Bloquées</div></div>
+    </div>
+  </header>
+
+  <!-- ===== BARRE D'ONGLETS ===== -->
+  <nav class="tabbar">
+    <button class="tabbtn active" data-tab="1" onclick="switchTab(1)">👤 Personnel</button>
+    <button class="tabbtn" data-tab="2" onclick="switchTab(2)">🌴 Congés &amp; Absences</button>
+    <button class="tabbtn" data-tab="7" onclick="switchTab(7)">⚔️ Gardes &amp; Engagements Externes</button>
+    <button class="tabbtn" data-tab="6" onclick="switchTab(6)">📅 Jours Fériés</button>
+    <button class="tabbtn" data-tab="3" onclick="switchTab(3)">⚙️ Configurations Salles</button>
+    <button class="tabbtn" data-tab="5" onclick="switchTab(5)">📅 Planning Hebdomadaire</button>
+    <button class="tabbtn" data-tab="4" onclick="switchTab(4)">📋 Règles &amp; Moteur</button>
+  </nav>
+
+  <!-- ============================================================ -->
+  <!-- TAB 1 : PERSONNEL -->
+  <!-- ============================================================ -->
+  <section class="tabpanel active" id="tab1">
+    <div class="section-title">Registre de l'équipe d'imagerie <span class="hint">— Saisie et qualification des statuts opérationnels</span></div>
+    <div class="grid-2">
+      <div class="panel">
+        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 20px;">
+          <div>
+            <label style="margin-top: 0; margin-bottom: 10px;">Salles Autorisées</label>
+            <div style="background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 12px;">
+              <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 700; font-size: 12px; color: var(--accent-blue-dark); cursor: pointer; border-bottom: 1px dashed var(--border); padding-bottom: 6px;">
+                <input type="checkbox" id="f-room-select-all" checked onchange="toggleAllRoomsAdd(this)" style="width: auto; margin: 0; cursor: pointer;"> Tout Sélectionner
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" class="f-room-checkbox" value="Scanner" checked style="width: auto; margin: 0; cursor: pointer;"> Scanner
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" class="f-room-checkbox" value="IRM" checked style="width: auto; margin: 0; cursor: pointer;"> IRM
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" class="f-room-checkbox" value="Radio" checked style="width: auto; margin: 0; cursor: pointer;"> Écho / Doppler
+              </label>
+              <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+                <input type="checkbox" class="f-room-checkbox" value="Lecture" checked style="width: auto; margin: 0; cursor: pointer;"> Salle de Lecture
+              </label>
+            </div>
+          </div>
+          <div style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div style="margin-top: -14px;">
+              <label>Matricule / ID</label>
+              <input type="text" id="f-id-manual" placeholder="Ex: SR-007">
+              <label>Nom &amp; Prénom</label>
+              <input type="text" id="f-name" placeholder="Ex: Dr. Nadine Ben Ali">
+              <label>Catégorie / Grade</label>
+              <select id="f-cat">
+                <option value="SENIOR">Médecin Senior</option>
+                <option value="RESIDENT_1ERE">Médecin Résident (1ère Année)</option>
+                <option value="RESIDENT_MAJEUR">Médecin Résident (Majeur)</option>
+                <option value="INF">Infirmier</option>
+                <option value="TECH">Technicien Supérieur</option>
+              </select>
+              <label>Statut initial</label>
+              <select id="f-status">
+                <option value="actif">Actif (Intégré au planning)</option>
+                <option value="retrait">En Retrait (Indisponible temporairement)</option>
+                <option value="hors_service">Hors Service (Définitif)</option>
+              </select>
+            </div>
+            <button class="btn block" style="margin-top:16px" onclick="addStaff()">+ Ajouter l'agent</button>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <strong style="font-size:13px">Registre complet (<span id="count-indicator">0</span> agents)</strong>
+          <input type="text" id="staff-search" placeholder="Rechercher un agent…" style="width:200px" oninput="renderStaffTable()">
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>ID</th><th>Nom &amp; Prénom</th><th>Catégorie</th><th>Statut</th><th>Changer Statut</th><th>Actions</th></tr></thead>
+            <tbody id="staff-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MODALE EDITION PERSONNEL ===== -->
+  <div class="modal-overlay" id="edit-staff-modal" onclick="closeEditModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px;">
+      <div class="modal-header">
+        <h3>Modifier les informations de l'agent</h3>
+        <button class="modal-close" onclick="closeEditModal()">✕</button>
+      </div>
+      <input type="hidden" id="edit-matricule">
+      <label>Nom &amp; Prénom</label>
+      <input type="text" id="edit-name">
+      <label>Catégorie / Grade</label>
+      <select id="edit-cat">
+        <option value="SENIOR">Médecin Senior</option>
+        <option value="RESIDENT_1ERE">Médecin Résident (1ère Année)</option>
+        <option value="RESIDENT_MAJEUR">Médecin Résident (Majeur)</option>
+        <option value="INF">Infirmier</option>
+        <option value="TECH">Technicien Supérieur</option>
+      </select>
+      <label style="margin-top: 15px; margin-bottom: 8px;">Salles Autorisées</label>
+      <div style="background: var(--panel-2); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; display: flex; flex-direction: column; gap: 10px;">
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 700; font-size: 12px; color: var(--accent-blue-dark); cursor: pointer; border-bottom: 1px dashed var(--border); padding-bottom: 6px;">
+          <input type="checkbox" id="edit-room-select-all" onchange="toggleAllRoomsEdit(this)" style="width: auto; margin: 0; cursor: pointer;"> Tout Sélectionner
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+          <input type="checkbox" class="edit-room-checkbox" value="Scanner" style="width: auto; margin: 0; cursor: pointer;"> Scanner
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+          <input type="checkbox" class="edit-room-checkbox" value="IRM" style="width: auto; margin: 0; cursor: pointer;"> IRM
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+          <input type="checkbox" class="edit-room-checkbox" value="Radio" style="width: auto; margin: 0; cursor: pointer;"> Écho / Doppler
+        </label>
+        <label style="display: flex; align-items: center; gap: 8px; margin: 0; text-transform: none; font-weight: 500; font-size: 12px; color: var(--text); cursor: pointer;">
+          <input type="checkbox" class="edit-room-checkbox" value="Lecture" style="width: auto; margin: 0; cursor: pointer;"> Salle de Lecture
+        </label>
+      </div>
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn" style="flex: 1;" onclick="saveStaffEdit()">Enregistrer</button>
+        <button class="btn secondary" style="flex: 1;" onclick="closeEditModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 2 : CONGÉS & ABSENCES -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab2">
+    <div class="section-title">Gestion des Absences &amp; Congés <span class="hint">— Seuil d'alerte configuré à 60 jours</span></div>
+    <div class="grid-2">
+      <div style="display:flex; flex-direction:column; gap:16px;">
+        <div class="panel">
+          <strong style="font-size:13px">Déposer un congé flexible</strong>
+          <label>Sélectionner l'agent</label>
+          <select id="lv-staff" onchange="checkLimitAlert()"></select>
+          <label>Date de Début</label><input type="date" id="lv-start" onchange="checkLimitAlert()">
+          <label>Date de Fin</label><input type="date" id="lv-end" onchange="checkLimitAlert()">
+          <div id="reason-block" style="display:none; background:#fee2e2; border: 1px solid #fecaca; border-radius:8px; padding:12px; margin-top:14px;">
+            <label style="color:#b91c1c; margin-top:0;">⚠️ Justificatif obligatoire (> 60 jours cumulés)</label>
+            <textarea id="lv-reason" placeholder="Veuillez renseigner le motif réglementaire de ce dépassement exceptionnel..." rows="3"></textarea>
+          </div>
+          <button class="btn block" style="margin-top:16px" onclick="addFlexLeave()">+ Enregistrer la période</button>
+        </div>
+        <div class="panel">
+          <strong style="font-size:13px">Bloc Fixe Obligatoire (30 jours)</strong>
+          <label>Sélectionner l'agent</label>
+          <select id="sb-staff"></select>
+          <label>Date de Début</label><input type="date" id="sb-start">
+          <button class="btn secondary block" style="margin-top:12px" onclick="assignSummerBlock()">Attribuer les 30j</button>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>ID</th><th>Nom (cliquable)</th><th>Bloc (30j)</th><th>Total Jours Flexibles</th><th>Cumul Global</th><th>Alerte (>60j)</th></tr></thead>
+            <tbody id="leave-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 7 : GARDES & ENGAGEMENTS EXTERNES -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab7">
+    <div class="section-title">Gardes &amp; Engagements Externes <span class="hint">— Interface Dynamique V2.7</span></div>
+
+    <!-- Sélection Période & Catégorie -->
+    <div class="panel" style="margin-bottom: 20px;">
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; align-items: end;">
+        <div class="form-group">
+          <label style="font-weight:600; font-size:0.9rem; color:var(--accent-blue);">Date de Début :</label>
+          <input type="date" id="startDateExt" class="form-control" onchange="renderExtDutyTab()">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:600; font-size:0.9rem; color:var(--accent-blue);">Date de Fin :</label>
+          <input type="date" id="endDateExt" class="form-control" onchange="renderExtDutyTab()">
+        </div>
+        <div class="form-group">
+          <label style="font-weight:600; font-size:0.9rem; color:var(--accent-blue);">Catégorie :</label>
+          <select id="categorySelectExt" class="form-control" onchange="renderExtDutyTab()">
+            <option value="SENIOR">Seniors / Enseignants (avec Drag & Drop)</option>
+            <option value="RESIDENT">Résidents Majeurs & 1ère Année</option>
+            <option value="TECH">Techniciens / Manipulateurs</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <button class="btn" style="background:var(--accent-blue); color:white;" onclick="renderExtDutyTab()">
+            <i class="fas fa-sync-alt"></i> Appliquer
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Palette d'éléments glissables -->
+    <div id="dragPaletteContainer" class="panel" style="margin-bottom: 20px; border: 1px dashed var(--accent-blue);">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <h4 style="margin:0; font-size:0.95rem; color:var(--accent-blue);">
+          <i class="fas fa-hand-pointer"></i> Éléments à glisser-déposer <span id="palette-cat-label"></span> :
+        </h4>
+        <button class="btn secondary" style="padding:5px 12px; font-size:12px;" onclick="openAddTagModal()">
+          <i class="fas fa-plus"></i> Ajouter une case
+        </button>
+      </div>
+      <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+        <span style="font-size:12px; color:var(--text-dim); margin-right:5px;">Glissez vers une case journée :</span>
+        <div class="drag-item engagement" draggable="true" ondragstart="handleDragStartExt(event, 'ENGAGEMENT_FAC', '🌟 Engagement Facultatif')" style="background:#6a3aa8; padding:6px 12px; border-radius:4px; color:white; font-size:12px; font-weight:bold; cursor:grab;">
+          🌟 Engagement Facultatif
+        </div>
+        <div class="drag-item repos" draggable="true" ondragstart="handleDragStartExt(event, 'REPOS', '💤 Repos')" style="background:#57677a; padding:6px 12px; border-radius:4px; color:white; font-size:12px; font-weight:bold; cursor:grab;">
+          💤 Repos
+        </div>
+        <div id="customTagsContainer" style="display:flex; gap:10px; flex-wrap:wrap;"></div>
+      </div>
+    </div>
+
+    <!-- MODALE : Ajouter une case -->
+    <div class="modal-overlay" id="add-tag-modal" onclick="closeAddTagModal()">
+      <div class="modal-content" onclick="event.stopPropagation()" style="width: 420px;">
+        <div class="modal-header">
+          <h3>Ajouter une case d'indisponibilité</h3>
+          <button class="modal-close" onclick="closeAddTagModal()">✕</button>
+        </div>
+        <label>Intitulé de la case</label>
+        <input type="text" id="tag-name" placeholder="Ex: Formation, Mission, Congé maladie...">
+        <label style="margin-top:12px;">Couleur</label>
+        <input type="color" id="tag-color" value="#4a5568" style="width:100%; height:38px; padding:2px; border:1px solid var(--border-soft); border-radius:6px; cursor:pointer;">
+        <button class="btn block" style="margin-top:20px; background-color: var(--accent-blue); font-weight:700; height:44px;" onclick="saveCustomExtDutyTag()">+ Ajouter la case</button>
+      </div>
+    </div>
+
+    <!-- Grille de saisie -->
+    <div class="panel">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h3 id="gridTitleExt" style="margin: 0; font-family: var(--disp); font-size: 18px;">Grille de Saisie</h3>
+        <div style="display: flex; gap: 10px;">
+          <button class="btn secondary" onclick="triggerExtDutyImport('SENIOR')"><i class="fas fa-file-import"></i> Importer Excel</button>
+          <button class="btn" style="background:var(--green); color:white;" onclick="toast('✓ Données sauvegardées dans l\'état global.')">
+            <i class="fas fa-save"></i> Enregistrer
+          </button>
+        </div>
+      </div>
+      <div class="table-scroll" style="max-height: 600px;">
+        <table id="scheduleTableExt" style="white-space: nowrap;">
+          <thead id="tableHeaderExt"></thead>
+          <tbody id="tableBodyExt"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <input type="file" id="extduty-import-input" style="display:none" accept=".xlsx,.xls,.csv,.pdf" onchange="handleExtDutyFileSelected(event)">
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 6 : JOURS FÉRIÉS -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab6">
+    <div class="section-title">Gestion des Jours Fériés <span class="hint">— Saisie de dates bloquées pour le service</span></div>
+
+    <div class="grid-calendar-layout">
+      <div class="calendar-card">
+        <div class="calendar-header">
+          <div class="calendar-title" id="calendar-month-year">Janvier 2026</div>
+          <div style="display: flex; gap: 6px;">
+            <button class="calendar-nav-btn" onclick="navigateCalendar(-1)">◀</button>
+            <button class="calendar-nav-btn" onclick="navigateCalendar(1)">▶</button>
+          </div>
+        </div>
+        <div class="calendar-weekdays">
+          <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+        </div>
+        <div class="calendar-grid-days" id="calendar-days-container"></div>
+        <div class="calendar-hint">💡 Cliquez directement sur un jour pour l'activer ou le désactiver comme jour férié.</div>
+      </div>
+      <div class="panel">
+        <strong style="font-size:15px; font-family: var(--sans); color: var(--text);">Ajouter un jour férié manuellement</strong>
+        <label style="margin-top: 20px;">DATE DU JOUR FÉRIÉ</label>
+        <input type="date" id="h-date" onchange="syncCalendarWithInputDate(this.value)">
+        <label>NOM / LIBELLÉ DU JOUR FÉRIÉ</label>
+        <input type="text" id="h-name" placeholder="Ex: Fête de la République">
+        <input type="checkbox" id="h-impact-garde" checked style="display: none;">
+        <button class="btn block" style="margin-top:20px; background-color: #0c7c8c; font-weight: 700; height: 46px;" onclick="addHoliday()">+ Enregistrer la date</button>
+        <div style="margin-top: 30px; border-top: 1px solid var(--border-soft); padding-top: 20px;">
+          <strong style="font-size:13px; font-family: var(--sans); color: var(--text);">Dates enregistrées (<span id="count-feries">0</span>)</strong>
+          <div class="holiday-list-container" id="feries-tbody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 3 : CONFIGURATIONS SALLES -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab3">
+    <div class="section-title">Paramétrage &amp; Capacités des Salles d'Examen <span class="hint">— Seuils d'alerte et gestion fine du personnel par modalité</span></div>
+    <div style="margin-bottom: 20px; display: flex; justify-content: flex-end;">
+      <button class="btn" style="background-color: #0c7c8c;" onclick="openAddRoomModal()">➕ Ajouter une salle d'examen</button>
+    </div>
+    <div class="rooms-container" id="rooms-grid"></div>
+  </section>
+
+  <!-- MODALE AJOUT SALLE -->
+  <div class="modal-overlay" id="add-room-modal" onclick="closeAddRoomModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px;">
+      <div class="modal-header">
+        <h3>Créer une nouvelle salle d'examen</h3>
+        <button class="modal-close" onclick="closeAddRoomModal()">✕</button>
+      </div>
+      <label>Nom de la Salle</label>
+      <input type="text" id="ar-name" placeholder="Ex: Mammographie, Radio Pulmonaire">
+      <label>Code / Modalité Associée (Planning)</label>
+      <select id="ar-code">
+        <option value="SCAN_M">Scanner (SCAN_M)</option>
+        <option value="IRM_M">IRM (IRM_M)</option>
+        <option value="RAD_M">Échographie / Doppler (RAD_M)</option>
+        <option value="LECT_M">Salle de Lecture (LECT_M)</option>
+      </select>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+        <div><label>Seniors Min</label><input type="number" id="ar-min-senior" value="1" min="0"></div>
+        <div><label>Seniors Max</label><input type="number" id="ar-max-senior" value="2" min="0"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div><label>Résidents Min</label><input type="number" id="ar-min-resident" value="1" min="0"></div>
+        <div><label>Résidents Max</label><input type="number" id="ar-max-resident" value="3" min="0"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div><label>Infirmiers Min</label><input type="number" id="ar-min-inf" value="0" min="0"></div>
+        <div><label>Infirmiers Max</label><input type="number" id="ar-max-inf" value="1" min="0"></div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
+        <div><label>Techniciens Min</label><input type="number" id="ar-min-tech" value="1" min="0"></div>
+        <div><label>Techniciens Max</label><input type="number" id="ar-max-tech" value="3" min="0"></div>
+      </div>
+      <div style="display: flex; gap: 10px; margin-top: 20px;">
+        <button class="btn" style="flex: 1;" onclick="submitAddRoom()">Ajouter la salle</button>
+        <button class="btn secondary" style="flex: 1;" onclick="closeAddRoomModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- TAB 4 : RÈGLES & MOTEUR -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab4">
+    <div class="section-title">Moteur algorithmique <span class="hint">— Logique métier</span></div>
+    <div class="rules-grid">
+      <div class="rule-category hard">
+        <h3 style="margin-top:0; color:var(--red);">🛑 Règles Dures (Inviolables)</h3>
+        <div class="rule-list">
+          <div class="rule-item"><div class="rule-icon">1</div><div class="rule-details"><div class="title">Repos Post-Garde des Résidents Majeurs</div><div class="desc">Un résident majeur ayant assuré une garde de nuit est obligatoirement au repos le lendemain. Les séniors peuvent conserver un poste de journée.</div></div></div>
+          <div class="rule-item"><div class="rule-icon">2</div><div class="rule-details"><div class="title">Contournement des pannes et maintenances</div><div class="desc">Aucun personnel n'est affecté à une salle durant sa période d'indisponibilité technique.</div></div></div>
+          <div class="rule-item"><div class="rule-icon">3</div><div class="rule-details"><div class="title">Respect des Congés validés</div><div class="desc">Le moteur ignore systématiquement les agents déclarés en congé.</div></div></div>
+          <div class="rule-item"><div class="rule-icon">4</div><div class="rule-details"><div class="title">Retrait opérationnel total</div><div class="desc">Les agents en retrait ou hors service sont exclus d'office.</div></div></div>
+        </div>
+      </div>
+      <div class="rule-category soft">
+        <h3 style="margin-top:0; color:var(--accent-blue);">⚖️ Règles Douces (Cibles d'équité)</h3>
+        <div class="rule-list">
+          <div class="rule-item"><div class="rule-icon">1</div><div class="rule-details"><div class="title">Répartition Équitable des Gardes</div><div class="desc">Le moteur lisse la charge des nuits d'astreinte hebdomadaires.</div></div></div>
+          <div class="rule-item"><div class="rule-icon">2</div><div class="rule-details"><div class="title">Limitation de la fatigue par modalité</div><div class="desc">Évite de positionner un technicien sur la même machine lourde en continu.</div></div></div>
+          <div class="rule-item"><div class="rule-icon">3</div><div class="rule-details"><div class="title">Mix de compétences juniors/seniors</div><div class="desc">Favorise la présence d'au moins un médecin Senior aux côtés des résidents.</div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- TAB 5 : PLANNING HEBDOMADAIRE -->
+  <!-- ============================================================ -->
+  <section class="tabpanel" id="tab5">
+    <div class="panel" style="margin-bottom: 20px; display: grid; grid-template-columns: 1.2fr 1.5fr 1.5fr 1fr; gap: 16px; align-items: end;">
+      <div>
+        <label>📅 Date de Début de Semaine</label>
+        <input type="date" id="week-start-date" value="2026-06-29" onchange="updateWeekLabelAutomatically()">
+      </div>
+      <div>
+        <label>📝 Nom de la Semaine</label>
+        <input type="text" id="week-name" placeholder="Ex: Semaine du 29 Juin">
+      </div>
+      <div>
+        <label>📂 Charger Semaine Enregistrée</label>
+        <select id="opt-week-select-tab5" onchange="loadSelectedWeekFromDropdown(this.value)">
+          <option value="">-- Choisir une semaine --</option>
+        </select>
+      </div>
+      <div>
+        <button class="btn block" style="background-color: #0369a1;" onclick="runOptimization()">⚡ Générer par IA</button>
+      </div>
+    </div>
+
+    <div class="planning-layout">
+      <div class="draggable-toolbox" id="draggable-toolbox-panel" style="display:none;">
+        <div class="toolbox-title" style="color: var(--accent-blue); font-weight: bold;">🛠️ Mode Modification Actif : Glissez une tâche ci-dessous vers le tableau</div>
+        <div class="toolbox-items">
+          <div class="task-cell scanner draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'SCAN_M')" style="width:auto; min-width:110px;">Scanner</div>
+          <div class="task-cell irm draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'IRM_M')" style="width:auto; min-width:110px;">IRM</div>
+          <div class="task-cell echo draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'RAD_M')" style="width:auto; min-width:140px;">Échographie / Doppler</div>
+          <div class="task-cell lecture draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'LECT_A')" style="width:auto; min-width:130px;">Salle de lecture</div>
+          <div class="task-cell garde draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'GARDE')" style="width:auto; min-width:100px;">Garde</div>
+          <div class="task-cell repos draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'REPOS')" style="width:auto; min-width:100px;">Repos</div>
+          <div class="task-cell conge draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'CONGE')" style="width:auto; min-width:100px;">Congé</div>
+          <div class="task-cell ferie draggable" draggable="true" ondragstart="handleToolboxDragStart(event, 'FERIE')" style="width:auto; min-width:100px;">Férié</div>
+        </div>
+      </div>
+
+      <div class="planning-header-row">
+        <div class="planning-title-info">
+          <div class="main-title" id="displayed-planning-title">Planning Hebdomadaire</div>
+          <div class="subtitle" id="displayed-planning-subtitle">Générez un plan par IA ou chargez-en un pour commencer.</div>
+        </div>
+        <div class="planning-actions">
+          <button class="btn-action edit-toggle" id="btn-toggle-edit" onclick="toggleEditMode()">✏️ Modifier</button>
+          <button class="btn-action conflicts" onclick="checkRulesAndConflicts()">⚠️ Vérifier conflits</button>
+          <button class="btn-action validate" onclick="toast('✓ Planning validé par le service')">Valider</button>
+          <button class="btn-action send" onclick="exportToPDF()">Imprimer / PDF</button>
+        </div>
+      </div>
+
+      <div class="planning-tabs">
+        <button class="planning-tab active" id="btn-tab-senior" onclick="setRestitView('SENIOR')">Planning des Seniors</button>
+        <button class="planning-tab" id="btn-tab-resident" onclick="setRestitView('RESIDENT')">Planning des Résidents</button>
+        <button class="planning-tab" id="btn-tab-tech" onclick="setRestitView('TECH')">Planning des Techniciens</button>
+        <button class="planning-tab" id="btn-tab-global" onclick="setRestitView('GLOBAL')">Planning global du service</button>
+        <button class="planning-tab" id="btn-tab-rooms" onclick="setRestitView('ROOMS')">👁️ Vue par Salles</button>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-scanner)"></span> Scanner</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-irm)"></span> IRM</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-echo)"></span> Échographie / Doppler</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-lecture)"></span> Salle de lecture</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-garde)"></span> Garde</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-repos)"></span> Repos</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-conge)"></span> Congé</div>
+        <div class="legend-item"><span class="legend-color" style="background:var(--color-ferie)"></span> Jour Férié</div>
+      </div>
+
+      <div id="restitution-content-target"></div>
+
+      <div style="margin-top: 20px; display: flex; justify-content: flex-end;" id="bottom-save-container">
+        <button class="btn" style="background-color: #1e40af; padding: 12px 24px;" onclick="saveCurrentWeek()">💾 Enregistrer cette semaine</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MODALES HISTORIQUE & CONFLITS ===== -->
+  <div class="modal-overlay" id="history-modal" onclick="closeModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 id="modal-agent-name">Historique des Absences</h3>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="history-list" id="modal-history-list"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="conflicts-modal" onclick="closeConflictsModal()">
+    <div class="modal-content" style="width:650px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3 style="color:var(--red);">⚠️ Violations Réglementaires Détectées</h3>
+        <button class="modal-close" onclick="closeConflictsModal()">✕</button>
+      </div>
+      <div class="history-list" id="modal-conflicts-list"></div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST ===== -->
+  <div class="toast" id="toast"></div>
+
+  <!-- ===== SCRIPT PRINCIPAL (Initialisateur d'application modulaire) ===== -->
+  <script type="module" src="/src/app.js"></script>
+
+</body>
+</html>
