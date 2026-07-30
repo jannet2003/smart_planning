@@ -4,7 +4,7 @@ from typing import List
 
 from app.db.database import get_db
 from app.models.personnel import Personnel
-from app.schemas.personnel import PersonnelBase, PersonnelResponse
+from app.schemas.personnel import PersonnelBase, PersonnelResponse, PersonnelUpdate
 
 router = APIRouter()
 
@@ -16,6 +16,20 @@ def get_all_personnel(db: Session = Depends(get_db)):
 def create_personnel(data: PersonnelBase, db: Session = Depends(get_db)):
     item = Personnel(**data.dict())
     db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/{personnel_id}", response_model=PersonnelResponse)
+def update_personnel(personnel_id: int, data: PersonnelUpdate, db: Session = Depends(get_db)):
+    item = db.query(Personnel).filter(Personnel.id == personnel_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Personnel non trouvé")
+    
+    update_data = data.dict(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(item, key, value)
+    
     db.commit()
     db.refresh(item)
     return item

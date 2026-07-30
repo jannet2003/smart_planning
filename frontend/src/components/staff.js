@@ -32,13 +32,15 @@ export async function addStaff() {
   document.querySelectorAll('.f-room-checkbox:checked').forEach(cb => allowedRooms.push(cb.value));
   
   const newAgent = {
-    // backend Personnel model maps: nom, prenom, role, quotite_horaire, actif
-    // Let's split name into nom and prenom
+    matricule: mat,
     nom: name.split(' ').slice(1).join(' ') || name,
     prenom: name.split(' ')[0] || '',
     role: cat,
     quotite_horaire: 40,
-    actif: status === 'actif'
+    statut: status,
+    actif: status === 'actif',
+    allowed_rooms: allowedRooms.join(','),
+    has_garde: ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(cat)
   };
 
   try {
@@ -88,27 +90,64 @@ export function closeEditModal() {
   document.getElementById('edit-staff-modal')?.classList.remove('active');
 }
 
-export function saveStaffEdit() {
+export async function saveStaffEdit() {
   const mat = document.getElementById('edit-matricule').value;
   const agent = state.staff.find(s => s.matricule === mat);
   if (!agent) return;
   
-  agent.name = document.getElementById('edit-name').value.trim();
-  agent.cat = document.getElementById('edit-cat').value;
+  const newName = document.getElementById('edit-name').value.trim();
+  const newCat = document.getElementById('edit-cat').value;
   let updatedRooms = [];
   document.querySelectorAll('.edit-room-checkbox:checked').forEach(cb => updatedRooms.push(cb.value));
-  agent.allowedRooms = updatedRooms;
-  
-  closeEditModal();
-  renderAll();
-  window.toast('✓ Profil de l\'agent mis à jour');
+
+  const prenom = newName.split(' ')[0] || '';
+  const nom = newName.split(' ').slice(1).join(' ') || newName;
+  const hasGarde = ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(newCat);
+
+  const payload = {
+    nom,
+    prenom,
+    role: newCat,
+    allowed_rooms: updatedRooms.join(','),
+    has_garde: hasGarde
+  };
+
+  try {
+    if (agent.id) {
+      await api.updatePersonnel(agent.id, payload);
+    }
+    agent.name = newName;
+    agent.cat = newCat;
+    agent.allowedRooms = updatedRooms;
+    agent.hasGarde = hasGarde;
+    
+    closeEditModal();
+    renderAll();
+    window.toast('✓ Profil de l\'agent mis à jour');
+  } catch (err) {
+    console.error(err);
+    window.toast('🛑 Erreur de mise à jour de l\'agent');
+  }
 }
 
-export function changeStaffStatus(mat, newStatus) {
+export async function changeStaffStatus(mat, newStatus) {
   const agent = state.staff.find(s => s.matricule === mat);
-  if (agent) { 
+  if (!agent) return;
+  
+  const isActif = newStatus === 'actif';
+  try {
+    if (agent.id) {
+      await api.updatePersonnel(agent.id, {
+        statut: newStatus,
+        actif: isActif
+      });
+    }
     agent.status = newStatus; 
-    renderAll(); 
+    renderAll();
+    window.toast(`✓ Statut de l'agent mis à jour (${newStatus})`);
+  } catch (err) {
+    console.error(err);
+    window.toast('🛑 Erreur de modification du statut');
   }
 }
 

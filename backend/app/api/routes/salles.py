@@ -4,7 +4,7 @@ from typing import List
 
 from app.db.database import get_db
 from app.models.salle import Salle
-from app.schemas.salle import SalleBase, SalleResponse
+from app.schemas.salle import SalleCreate, SalleUpdate, SalleResponse
 
 router = APIRouter()
 
@@ -12,10 +12,28 @@ router = APIRouter()
 def get_all_salles(db: Session = Depends(get_db)):
     return db.query(Salle).all()
 
+@router.get("/{salle_id}", response_model=SalleResponse)
+def get_salle(salle_id: int, db: Session = Depends(get_db)):
+    item = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    return item
+
 @router.post("/", response_model=SalleResponse)
-def create_salle(data: SalleBase, db: Session = Depends(get_db)):
+def create_salle(data: SalleCreate, db: Session = Depends(get_db)):
     item = Salle(**data.dict())
     db.add(item)
+    db.commit()
+    db.refresh(item)
+    return item
+
+@router.put("/{salle_id}", response_model=SalleResponse)
+def update_salle(salle_id: int, data: SalleUpdate, db: Session = Depends(get_db)):
+    item = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    for field, value in data.dict().items():
+        setattr(item, field, value)
     db.commit()
     db.refresh(item)
     return item

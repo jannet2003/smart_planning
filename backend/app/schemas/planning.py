@@ -16,4 +16,3 @@ class PlanningSemaineResponse(PlanningSemaineBase):
     date_validation: datetime
     class Config:
         from_attributes = True
-        orm_mode = True

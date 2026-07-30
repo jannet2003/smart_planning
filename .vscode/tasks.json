@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start FastAPI Backend",
+            "type": "shell",
+            "command": "C:\\Users\\janne\\AppData\\Local\\Microsoft\\WindowsApps\\python3.11.exe -m uvicorn app.main:app --reload --port 8000",
+            "options": {
+                "cwd": "${workspaceFolder}/backend"
+            },
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "custom",
+                "pattern": {
+                    "regexp": "^$"
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": ".*Starting server.*|.*Uvicorn running on.*",
+                    "endsPattern": ".*Application startup complete.*|.*Uvicorn running on http://127.0.0.1:8000.*"
+                }
+            }
+        }
+    ]
+}

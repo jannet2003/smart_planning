@@ -16,6 +16,16 @@ export async function createPersonnel(personnel) {
   return res.json();
 }
 
+export async function updatePersonnel(id, personnel) {
+  const res = await fetch(`${BASE_URL}/personnel/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(personnel)
+  });
+  if (!res.ok) throw new Error("Erreur de mise à jour de l'agent");
+  return res.json();
+}
+
 export async function deletePersonnel(id) {
   const res = await fetch(`${BASE_URL}/personnel/${id}`, {
     method: 'DELETE'
@@ -36,7 +46,23 @@ export async function createSalle(salle) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(salle)
   });
-  if (!res.ok) throw new Error("Erreur de création de la salle");
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Erreur de création de la salle: ${errText}`);
+  }
+  return res.json();
+}
+
+export async function updateSalle(id, salle) {
+  const res = await fetch(`${BASE_URL}/salles/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(salle)
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Erreur de mise à jour de la salle: ${errText}`);
+  }
   return res.json();
 }
 

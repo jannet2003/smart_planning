@@ -54,6 +54,8 @@ export const state = {
   }
 };
 
+window.state = state;
+
 const listeners = [];
 
 export function registerListener(callback) {

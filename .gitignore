@@ -1,0 +1,26 @@
+# Environnement virtuel Python
+.venv/
+
+# Fichiers compilés Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+
+# Base de données locale (ne pas versionner les données)
+backend/planning.db
+
+# Dossier généré par le sous-module / clone interne
+radiologie-planning/
+
+# Fichiers de configuration IDE
+.idea/
+*.suo
+*.user
+
+# Logs
+*.log
+
+# Variables d'environnement
+.env
+.env.local

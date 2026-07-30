@@ -1,7 +1,7 @@
 import { state, registerListener, renderAll } from './state.js';
 import * as api from './api/api.js';
 import { initStaff, renderStaffTable, populateStaffSelects } from './components/staff.js';
-import { initRooms, renderRooms } from './components/rooms.js';
+import { initRooms, renderRooms, apiRoomToLocal } from './components/rooms.js';
 import { initLeaves, renderLeaveTable, totalLeaveDays } from './components/leaves.js';
 import { initCalendar, renderHolidaysTable } from './components/calendar.js';
 import { initPlanning, renderRestitution, updateArchivesDropdown } from './components/planning.js';
@@ -79,16 +79,21 @@ const defaultRooms = [
 async function seedAndLoadData() {
   try {
     // 1. Seeding Personnel
+    // On ne re-seed QUE si la base est vide
     const existingStaff = await api.fetchPersonnel();
     if (existingStaff.length === 0) {
-      console.log("Seeding du personnel dans la base de données...");
+      console.log("Seeding du personnel complet (27 agents) dans la base de données...");
       for (const agent of defaultStaff) {
         await api.createPersonnel({
+          matricule: agent.matricule,
           nom: agent.name.split(' ').slice(1).join(' ') || agent.name,
           prenom: agent.name.split(' ')[0] || '',
           role: agent.cat,
           quotite_horaire: 40,
-          actif: agent.status === 'actif'
+          statut: agent.status,
+          actif: agent.status === 'actif',
+          allowed_rooms: (agent.allowedRooms || []).join(','),
+          has_garde: agent.hasGarde
         });
       }
     }
@@ -99,77 +104,83 @@ async function seedAndLoadData() {
       console.log("Seeding des salles dans la base de données...");
       for (const room of defaultRooms) {
         await api.createSalle({
-          nom: room.name,
-          type_salle: room.code,
-          capacite: 1,
-          actif: !room.isBroken
+          nom:          room.name,
+          type_salle:   room.code,
+          code:         room.code,
+          actif:        !room.isBroken,
+          min_senior:   room.minSenior,
+          max_senior:   room.maxSenior,
+          min_resident: room.minResident,
+          max_resident: room.maxResident,
+          min_inf:      room.minInf,
+          max_inf:      room.maxInf,
+          min_tech:     room.minTech,
+          max_tech:     room.maxTech,
+          senior_mode:  room.seniorMode,
+          senior_compatible_rooms: (room.seniorCompatibleRooms || []).join(','),
+          is_broken:    room.isBroken,
+          broken_start: room.brokenStart  || '',
+          broken_end:   room.brokenEnd    || '',
+          broken_reason: room.brokenReason || ''
         });
       }
     }
 
     // 3. Charger le personnel depuis la BD
     const dbStaff = await api.fetchPersonnel();
-    state.staff = dbStaff.map(s => {
+    state.staff = dbStaff.map((s, idx) => {
       const fullName = `${s.prenom} ${s.nom}`.trim();
+      const lowerName = fullName.toLowerCase();
       const subCat = s.role;
-      let matricule = `ID-${s.id}`;
+      let matricule = s.matricule || `ID-${s.id}`;
       
-      // Récupérer le matricule d'origine pour compatibilité
-      if (subCat === 'SENIOR') {
-        if (fullName.includes('Jannet')) matricule = 'SR-001';
-        else if (fullName.includes('Ahmed')) matricule = 'SR-002';
-        else if (fullName.includes('Achour')) matricule = 'SR-003';
-        else if (fullName.includes('Maatouk')) matricule = 'SR-004';
-        else if (fullName.includes('Gaied')) matricule = 'SR-005';
-      } else if (subCat.startsWith('RESIDENT')) {
-        const match = fullName.match(/R(\d+)/);
-        if (match) matricule = `RES-${match[1].padStart(3, '0')}`;
-      } else if (subCat === 'TECH') {
-        const match = fullName.match(/(\d+)/);
-        if (match) matricule = `TS-${match[1].padStart(3, '0')}`;
-      } else if (subCat === 'INF') {
-        matricule = 'INF-001';
+      // Récupérer le matricule d'origine pour compatibilité si absent
+      if (!s.matricule) {
+        if (subCat === 'SENIOR') {
+          if (lowerName.includes('jannet')) matricule = 'SR-001';
+          else if (lowerName.includes('ahmed')) matricule = 'SR-002';
+          else if (lowerName.includes('achour')) matricule = 'SR-003';
+          else if (lowerName.includes('maatouk')) matricule = 'SR-004';
+          else if (lowerName.includes('gaied')) matricule = 'SR-005';
+          else matricule = `SR-${String(s.id).padStart(3, '0')}`;
+        } else if (subCat.startsWith('RESIDENT')) {
+          const match = fullName.match(/R(\d+)/i);
+          if (match) matricule = `RES-${match[1].padStart(3, '0')}`;
+          else matricule = `RES-${String(s.id).padStart(3, '0')}`;
+        } else if (subCat === 'TECH') {
+          const match = fullName.match(/(\d+)/);
+          if (match) matricule = `TS-${match[1].padStart(3, '0')}`;
+          else matricule = `TS-${String(s.id).padStart(3, '0')}`;
+        } else if (subCat === 'INF') {
+          matricule = 'INF-001';
+        }
       }
       
       let allowedRooms = ['Scanner', 'IRM', 'Radio', 'Lecture'];
-      if (subCat === 'INF') allowedRooms = ['Scanner', 'Radio'];
-      if (subCat === 'TECH') allowedRooms = ['Scanner', 'IRM', 'Radio'];
+      if (s.allowed_rooms !== undefined && s.allowed_rooms !== null && s.allowed_rooms !== '') {
+        allowedRooms = s.allowed_rooms.split(',').filter(Boolean);
+      } else {
+        if (subCat === 'INF') allowedRooms = ['Scanner', 'Radio'];
+        if (subCat === 'TECH') allowedRooms = ['Scanner', 'IRM', 'Radio'];
+      }
+
+      const status = s.statut || (s.actif ? 'actif' : 'retrait');
+      const hasGarde = s.has_garde !== undefined && s.has_garde !== null ? s.has_garde : ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(subCat);
 
       return {
         id: s.id,
         matricule: matricule,
         name: fullName,
         cat: subCat,
-        status: s.actif ? 'actif' : 'retrait',
+        status: status,
         allowedRooms: allowedRooms,
-        hasGarde: ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(subCat)
+        hasGarde: hasGarde
       };
     });
 
-    // 4. Charger les salles depuis la BD
+    // 4. Charger les salles depuis la BD (avec tous les champs enregistrés)
     const dbRooms = await api.fetchSalles();
-    state.rooms = dbRooms.map(r => {
-      const def = defaultRooms.find(dr => dr.code === r.type_salle || dr.name === r.nom);
-      return {
-        id: r.id,
-        name: r.nom,
-        code: r.type_salle,
-        minSenior: def ? def.minSenior : 1,
-        maxSenior: def ? def.maxSenior : 2,
-        minResident: def ? def.minResident : 1,
-        maxResident: def ? def.maxResident : 3,
-        minInf: def ? def.minInf : 0,
-        maxInf: def ? def.maxInf : 1,
-        minTech: def ? def.minTech : 1,
-        maxTech: def ? def.maxTech : 3,
-        seniorMode: def ? def.seniorMode : 'EXCLUSIVE',
-        seniorCompatibleRooms: def ? def.seniorCompatibleRooms : [],
-        isBroken: !r.actif,
-        brokenStart: '',
-        brokenEnd: '',
-        brokenReason: ''
-      };
-    });
+    state.rooms = dbRooms.map(r => apiRoomToLocal(r));
 
     // 5. Charger les plannings enregistrés depuis la BD
     const dbPlannings = await api.fetchPlannings();
