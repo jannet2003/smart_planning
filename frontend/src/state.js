@@ -27,6 +27,7 @@ export const TASK_LABELS = {
 export const state = {
   staff: [],
   leaves: { summer: {}, flex: [] },
+  ui: { isHydrated: false },
   holidays: [
     { date: '2026-01-14', name: 'Révolution tunisienne', impactGarde: true },
     { date: '2026-03-20', name: 'Fête de l\'Indépendance', impactGarde: true },

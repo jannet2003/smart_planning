@@ -1,5 +1,6 @@
 import { state, CATS, renderAll } from '../state.js';
 import * as api from '../api/api.js';
+import { buildStaffName, getStaffCategoryFlags, normalizeStatus, getStatusLabel } from '../utils/staffUtils.js';
 
 export function initStaff() {
   window.addStaff = addStaff;
@@ -31,16 +32,18 @@ export async function addStaff() {
   let allowedRooms = [];
   document.querySelectorAll('.f-room-checkbox:checked').forEach(cb => allowedRooms.push(cb.value));
   
+  const normalizedStatus = normalizeStatus(status);
+  const categoryFlags = getStaffCategoryFlags(cat);
   const newAgent = {
     matricule: mat,
     nom: name.split(' ').slice(1).join(' ') || name,
     prenom: name.split(' ')[0] || '',
     role: cat,
     quotite_horaire: 40,
-    statut: status,
-    actif: status === 'actif',
+    statut: normalizedStatus,
+    actif: normalizedStatus === 'actif',
     allowed_rooms: allowedRooms.join(','),
-    has_garde: ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(cat)
+    has_garde: categoryFlags.hasGarde
   };
 
   try {
@@ -51,9 +54,9 @@ export async function addStaff() {
       matricule: mat,
       name: name,
       cat: cat,
-      status: status,
+      status: normalizedStatus,
       allowedRooms: allowedRooms,
-      hasGarde: ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(cat)
+      hasGarde: categoryFlags.hasGarde
     });
     
     document.getElementById('f-id-manual').value = '';
@@ -102,7 +105,7 @@ export async function saveStaffEdit() {
 
   const prenom = newName.split(' ')[0] || '';
   const nom = newName.split(' ').slice(1).join(' ') || newName;
-  const hasGarde = ['SENIOR', 'RESIDENT_MAJEUR', 'TECH'].includes(newCat);
+  const hasGarde = getStaffCategoryFlags(newCat).hasGarde;
 
   const payload = {
     nom,
@@ -134,17 +137,18 @@ export async function changeStaffStatus(mat, newStatus) {
   const agent = state.staff.find(s => s.matricule === mat);
   if (!agent) return;
   
-  const isActif = newStatus === 'actif';
+  const normalizedStatus = normalizeStatus(newStatus);
+  const isActif = normalizedStatus === 'actif';
   try {
     if (agent.id) {
       await api.updatePersonnel(agent.id, {
-        statut: newStatus,
+        statut: normalizedStatus,
         actif: isActif
       });
     }
-    agent.status = newStatus; 
+    agent.status = normalizedStatus;
     renderAll();
-    window.toast(`✓ Statut de l'agent mis à jour (${newStatus})`);
+    window.toast(`✓ Statut de l'agent mis à jour (${normalizedStatus})`);
   } catch (err) {
     console.error(err);
     window.toast('🛑 Erreur de modification du statut');
@@ -176,11 +180,11 @@ export function renderStaffTable() {
         <td><b>${s.matricule}</b></td>
         <td>${s.name}${s.hasGarde ? '<span style="font-size:10px; color:var(--text-garde); font-weight:bold; margin-left:5px;">🌙 Garde</span>' : ''}</td>
         <td><span class="badge ${s.cat}">${CATS[s.cat] ? CATS[s.cat].short : s.cat}</span></td>
-        <td><span class="status-badge ${s.status}">${s.status.toUpperCase().replace('_', ' ')}</span></td>
+        <td><span class="status-badge ${normalizeStatus(s.status)}">${getStatusLabel(s.status)}</span></td>
         <td><select style="width:120px; padding:4px;" onchange="changeStaffStatus('${s.matricule}', this.value)">
-          <option value="actif" ${s.status === 'actif' ? 'selected' : ''}>Actif</option>
-          <option value="retrait" ${s.status === 'retrait' ? 'selected' : ''}>En Retrait</option>
-          <option value="hors_service" ${s.status === 'hors_service' ? 'selected' : ''}>Hors Service</option>
+          <option value="actif" ${normalizeStatus(s.status) === 'actif' ? 'selected' : ''}>Actif</option>
+          <option value="retrait" ${normalizeStatus(s.status) === 'retrait' ? 'selected' : ''}>En Retrait</option>
+          <option value="hors_service" ${normalizeStatus(s.status) === 'hors_service' ? 'selected' : ''}>Hors Service</option>
         </select></td>
         <td>
           <button class="btn secondary" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="openEditModal('${s.matricule}')">✏️ Éditer</button>

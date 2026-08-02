@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Any
+
 
 class PlanningSemaineBase(BaseModel):
     semaine_code: str
@@ -8,11 +9,13 @@ class PlanningSemaineBase(BaseModel):
     snapshot_salles: Any
     affectations: Any
 
+
 class PlanningSemaineCreate(PlanningSemaineBase):
     pass
+
 
 class PlanningSemaineResponse(PlanningSemaineBase):
     id: int
     date_validation: datetime
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)

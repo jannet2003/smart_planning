@@ -6,6 +6,7 @@ import { initLeaves, renderLeaveTable, totalLeaveDays } from './components/leave
 import { initCalendar, renderHolidaysTable } from './components/calendar.js';
 import { initPlanning, renderRestitution, updateArchivesDropdown } from './components/planning.js';
 import { initExtDuty, renderExtDutyTab } from './components/extDuty.js';
+import { defaultStaff, defaultRooms } from './utils/appSeedData.js';
 
 // ---------- Initialisation des contrôleurs ----------
 initStaff();
@@ -52,35 +53,20 @@ window.updateHeaderStats = function() {
   if (sA) sA.textContent = state.staff.filter(s => totalLeaveDays(s.matricule) > 60).length;
 };
 
-// ---------- Données par défaut pour le Seeding ----------
-const defaultStaff = [
-  { matricule: 'SR-001', name: 'Dr. Jannet Hazzouk', cat: 'SENIOR', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true },
-  { matricule: 'SR-002', name: 'Dr. Ahmed Kricha', cat: 'SENIOR', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true },
-  { matricule: 'SR-003', name: 'Dr Achour', cat: 'SENIOR', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true },
-  { matricule: 'SR-004', name: 'Dr Maatouk', cat: 'SENIOR', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true },
-  { matricule: 'SR-005', name: 'Dr Gaied', cat: 'SENIOR', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true },
-  { matricule: 'INF-001', name: 'Inf. Chaker Ben Salem', cat: 'INF', status: 'actif', allowedRooms: ['Scanner', 'Radio'], hasGarde: false }
-];
-for (let i = 1; i <= 6; i++) {
-  let subCat = (i <= 3) ? 'RESIDENT_1ERE' : 'RESIDENT_MAJEUR';
-  defaultStaff.push({ matricule: `RES-${String(i).padStart(3, '0')}`, name: `Dr. Résident R${i}`, cat: subCat, status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio', 'Lecture'], hasGarde: true });
-}
-for (let i = 1; i <= 15; i++) {
-  defaultStaff.push({ matricule: `TS-${String(i).padStart(3, '0')}`, name: `Tech. Radiologie ${i}`, cat: 'TECH', status: 'actif', allowedRooms: ['Scanner', 'IRM', 'Radio'], hasGarde: false });
-}
-
-const defaultRooms = [
-  { id: 'Scanner', name: 'Scanner', minSenior: 1, maxSenior: 3, minResident: 1, maxResident: 3, minInf: 0, maxInf: 2, minTech: 2, maxTech: 4, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'SCAN_M' },
-  { id: 'IRM', name: 'IRM', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 3, minInf: 0, maxInf: 1, minTech: 1, maxTech: 3, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'IRM_M' },
-  { id: 'Radio', name: 'Échographie / Doppler', minSenior: 1, maxSenior: 2, minResident: 2, maxResident: 4, minInf: 1, maxInf: 2, minTech: 1, maxTech: 2, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'RAD_M' },
-  { id: 'Lecture', name: 'Salle de Lecture', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 2, minInf: 0, maxInf: 0, minTech: 0, maxTech: 1, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'LECT_M' }
-];
-
 async function seedAndLoadData() {
   try {
+    const safeJson = async (request, fallback = []) => {
+      try {
+        const response = await request();
+        return Array.isArray(response) ? response : fallback;
+      } catch (error) {
+        console.warn('API unavailable, using fallback', error);
+        return fallback;
+      }
+    };
+
     // 1. Seeding Personnel
-    // On ne re-seed QUE si la base est vide
-    const existingStaff = await api.fetchPersonnel();
+    const existingStaff = await safeJson(() => api.fetchPersonnel());
     if (existingStaff.length === 0) {
       console.log("Seeding du personnel complet (27 agents) dans la base de données...");
       for (const agent of defaultStaff) {
@@ -99,7 +85,7 @@ async function seedAndLoadData() {
     }
     
     // 2. Seeding Salles
-    const existingRooms = await api.fetchSalles();
+    const existingRooms = await safeJson(() => api.fetchSalles());
     if (existingRooms.length === 0) {
       console.log("Seeding des salles dans la base de données...");
       for (const room of defaultRooms) {
@@ -127,7 +113,10 @@ async function seedAndLoadData() {
     }
 
     // 3. Charger le personnel depuis la BD
-    const dbStaff = await api.fetchPersonnel();
+    const dbStaff = await safeJson(() => api.fetchPersonnel());
+    if (!Array.isArray(dbStaff)) {
+      throw new Error('Réponse personnel invalide depuis l’API');
+    }
     state.staff = dbStaff.map((s, idx) => {
       const fullName = `${s.prenom} ${s.nom}`.trim();
       const lowerName = fullName.toLowerCase();
@@ -179,11 +168,17 @@ async function seedAndLoadData() {
     });
 
     // 4. Charger les salles depuis la BD (avec tous les champs enregistrés)
-    const dbRooms = await api.fetchSalles();
+    const dbRooms = await safeJson(() => api.fetchSalles());
+    if (!Array.isArray(dbRooms)) {
+      throw new Error('Réponse salles invalide depuis l’API');
+    }
     state.rooms = dbRooms.map(r => apiRoomToLocal(r));
 
     // 5. Charger les plannings enregistrés depuis la BD
-    const dbPlannings = await api.fetchPlannings();
+    const dbPlannings = await safeJson(() => api.fetchPlannings(), []);
+    if (!Array.isArray(dbPlannings)) {
+      throw new Error('Réponse plannings invalide depuis l’API');
+    }
     dbPlannings.forEach(p => {
       const key = `${p.semaine_code}_DB_${p.id}`;
       state.archives[key] = {
@@ -195,6 +190,7 @@ async function seedAndLoadData() {
     updateArchivesDropdown();
 
     // Rendu final après chargement
+    state.ui.isHydrated = true;
     renderAll();
     console.log("Données initialisées avec succès !");
   } catch (err) {
@@ -203,6 +199,7 @@ async function seedAndLoadData() {
     // Fallback locale si API en panne
     state.staff = defaultStaff;
     state.rooms = defaultRooms;
+    state.ui.isHydrated = true;
     renderAll();
   }
 }

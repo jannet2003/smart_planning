@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional, List
+from pydantic import BaseModel, ConfigDict
+from typing import Optional
+
 
 class SalleBase(BaseModel):
     nom: str
@@ -24,13 +25,16 @@ class SalleBase(BaseModel):
     broken_end: Optional[str] = ''
     broken_reason: Optional[str] = ''
 
+
 class SalleCreate(SalleBase):
     pass
+
 
 class SalleUpdate(SalleBase):
     pass
 
+
 class SalleResponse(SalleBase):
     id: int
-    class Config:
-        from_attributes = True
+
+    model_config = ConfigDict(from_attributes=True)
