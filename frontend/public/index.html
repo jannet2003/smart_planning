@@ -469,25 +469,33 @@
   </div>
 
   <!-- MODALE CONFIGURER INDISPONIBILITÉ (PANNE / MAINTENANCE) -->
-  <div class="modal-overlay" id="room-unavailability-modal" onclick="closeUnavailabilityModal()">
-    <div class="modal-content" onclick="event.stopPropagation()" style="width: 450px;">
+  <div class="modal-overlay" id="room-unavail-modal" onclick="closeUnavailabilityModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px; max-height: 85vh; overflow-y: auto;">
       <div class="modal-header">
-        <h3 id="unavail-modal-title">🛠️ Configurer l'indisponibilité</h3>
+        <h3 id="unavail-modal-room-name">🛠️ Indisponibilités & Maintenance</h3>
         <button class="modal-close" onclick="closeUnavailabilityModal()">✕</button>
       </div>
-      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 14px; background: rgba(220,38,38,0.06); padding: 10px; border-radius: 8px;">
-        <input type="checkbox" id="unavail-is-broken" style="width: 18px; height: 18px; margin: 0; cursor: pointer;">
-        <label for="unavail-is-broken" style="margin: 0; font-weight: 700; color: var(--red); cursor: pointer;">Marquer la salle en panne / hors service</label>
+
+      <div style="margin-bottom: 16px;">
+        <h4 style="font-size: 13px; color: var(--accent-blue-dark); margin: 0 0 8px;">Historique des périodes</h4>
+        <div id="unavail-history-list" style="max-height: 180px; overflow-y: auto;"></div>
       </div>
-      <label>Date de début</label>
-      <input type="date" id="unavail-start">
-      <label>Date de fin</label>
-      <input type="date" id="unavail-end">
-      <label>Raison de l'indisponibilité</label>
-      <textarea id="unavail-reason" rows="3" placeholder="Ex: Maintenance technique annuelle, Panne du tube scanner..."></textarea>
-      <div style="display: flex; gap: 10px; margin-top: 20px;">
-        <button class="btn danger" style="flex: 1;" type="button" onclick="saveUnavailabilityModal()">Enregistrer</button>
-        <button class="btn secondary" style="flex: 1;" type="button" onclick="closeUnavailabilityModal()">Annuler</button>
+
+      <div style="background: var(--panel-2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
+        <h4 style="font-size: 13px; margin: 0 0 10px; color: var(--text);">➕ Ajouter une nouvelle période</h4>
+        <label>Date de début</label>
+        <input type="date" id="unavail-start">
+        <label>Date de fin</label>
+        <input type="date" id="unavail-end">
+        <label>Motif de l'indisponibilité</label>
+        <input type="text" id="unavail-reason" placeholder="Ex: Maintenance annuelle, Panne tube RX...">
+        <div style="display: flex; gap: 10px; margin-top: 14px;">
+          <button class="btn danger" style="flex: 1;" type="button" onclick="saveUnavailabilityModal()">Ajouter la période</button>
+        </div>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
+        <button class="btn secondary" type="button" onclick="closeUnavailabilityModal()">Fermer</button>
       </div>
     </div>
   </div>

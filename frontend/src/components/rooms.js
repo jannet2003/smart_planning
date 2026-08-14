@@ -17,11 +17,11 @@ export function initRooms() {
   window.openUnavailabilityModal    = openUnavailabilityModal;
   window.closeUnavailabilityModal   = closeUnavailabilityModal;
   window.saveUnavailabilityModal    = saveUnavailabilityModal;
+  window.deleteIndisponibiliteItem  = deleteIndisponibiliteItem;
   window.clearUnavailability        = clearUnavailability;
   window.deleteRoom                 = deleteRoom;
 }
 
-// Attachement immédiat sur window au chargement du module
 window.openAddRoomModal           = openAddRoomModal;
 window.closeAddRoomModal          = closeAddRoomModal;
 window.submitAddRoom              = submitAddRoom;
@@ -34,91 +34,83 @@ window.saveCompatibilityModal     = saveCompatibilityModal;
 window.openUnavailabilityModal    = openUnavailabilityModal;
 window.closeUnavailabilityModal   = closeUnavailabilityModal;
 window.saveUnavailabilityModal    = saveUnavailabilityModal;
+window.deleteIndisponibiliteItem  = deleteIndisponibiliteItem;
 window.clearUnavailability        = clearUnavailability;
 window.deleteRoom                 = deleteRoom;
 
-// ─────────────────────────────────────────────
-// Conversion objet local → payload API backend
-// ─────────────────────────────────────────────
 function roomToPayload(room) {
   return {
-    nom:          room.name || room.nom || '',
-    actif:        !room.isBroken,
-    min_senior:   Number(room.minSenior)   || 0,
-    max_senior:   Number(room.maxSenior)   || 0,
-    min_resident: Number(room.minResident) || 0,
-    max_resident: Number(room.maxResident) || 0,
-    min_inf:      Number(room.minInf)      || 0,
-    max_inf:      Number(room.maxInf)      || 0,
-    min_tech:     Number(room.minTech)     || 0,
-    max_tech:     Number(room.maxTech)     || 0,
-    senior_mode:  room.seniorMode          || 'EXCLUSIVE',
-    senior_compatible_rooms: Array.isArray(room.seniorCompatibleRooms)
-      ? room.seniorCompatibleRooms.join(',')
-      : (room.seniorCompatibleRooms || ''),
-    is_broken:    !!room.isBroken,
-    broken_start: room.brokenStart  || '',
-    broken_end:   room.brokenEnd    || '',
-    broken_reason: room.brokenReason || ''
+    nom:                room.nom || room.name || '',
+    min_senior:         Number(room.min_senior ?? room.minSenior) || 0,
+    max_senior:         Number(room.max_senior ?? room.maxSenior) || 0,
+    min_resident:       Number(room.min_resident ?? room.minResident) || 0,
+    max_resident:       Number(room.max_resident ?? room.maxResident) || 0,
+    min_inf:            Number(room.min_inf ?? room.minInf) || 0,
+    max_inf:            Number(room.max_inf ?? room.maxInf) || 0,
+    min_tech:           Number(room.min_tech ?? room.minTech) || 0,
+    max_tech:           Number(room.max_tech ?? room.maxTech) || 0,
+    senior_mode:        room.senior_mode || room.seniorMode || 'EXCLUSIVE',
+    mode_compatibilite: room.mode_compatibilite || 'AUCUNE',
+    compatible_salle_ids: (room.compatible_salle_ids || room.seniorCompatibleRooms || []).map(Number)
   };
 }
 
-// ─────────────────────────────────────────────
-// Conversion payload API → objet local
-// ─────────────────────────────────────────────
 export function apiRoomToLocal(r) {
   return {
-    id:           r.id,
-    name:         r.nom,
-    minSenior:    r.min_senior,
-    maxSenior:    r.max_senior,
-    minResident:  r.min_resident,
-    maxResident:  r.max_resident,
-    minInf:       r.min_inf,
-    maxInf:       r.max_inf,
-    minTech:      r.min_tech,
-    maxTech:      r.max_tech,
-    seniorMode:   r.senior_mode || 'EXCLUSIVE',
-    seniorCompatibleRooms: r.senior_compatible_rooms
-      ? r.senior_compatible_rooms.split(',').filter(Boolean)
-      : [],
-    isBroken:     r.is_broken || !r.actif,
-    brokenStart:  r.broken_start  || '',
-    brokenEnd:    r.broken_end    || '',
-    brokenReason: r.broken_reason || ''
+    id:                   r.id,
+    nom:                  r.nom,
+    name:                 r.nom,
+    min_senior:           r.min_senior,
+    max_senior:           r.max_senior,
+    min_resident:         r.min_resident,
+    max_resident:         r.max_resident,
+    min_inf:              r.min_inf,
+    max_inf:              r.max_inf,
+    min_tech:             r.min_tech,
+    max_tech:             r.max_tech,
+    minSenior:            r.min_senior,
+    maxSenior:            r.max_senior,
+    minResident:          r.min_resident,
+    maxResident:          r.max_resident,
+    minInf:               r.min_inf,
+    maxInf:               r.max_inf,
+    minTech:              r.min_tech,
+    maxTech:              r.max_tech,
+    senior_mode:          r.senior_mode || 'EXCLUSIVE',
+    seniorMode:           r.senior_mode || 'EXCLUSIVE',
+    mode_compatibilite:   r.mode_compatibilite || 'AUCUNE',
+    compatible_salle_ids: r.compatible_salle_ids || [],
+    seniorCompatibleRooms: r.compatible_salle_ids || []
   };
 }
 
-// ─────────────────────────────────────────────
-// Sauvegarde d'une salle en BD (create ou update)
-// ─────────────────────────────────────────────
 async function persistRoom(room) {
   const payload = roomToPayload(room);
-  try {
-    if (room.id && typeof room.id === 'number') {
-      const updated = await api.updateSalle(room.id, payload);
-      return updated;
-    } else {
-      const created = await api.createSalle(payload);
-      return created;
-    }
-  } catch (err) {
-    console.error('Erreur persistRoom:', err);
-    throw err;
+  if (room.id && typeof room.id === 'number') {
+    return await api.updateSalle(room.id, payload);
+  } else {
+    return await api.createSalle(payload);
   }
 }
 
-// ─────────────────────────────────────────────
-// updateRoomProp : met à jour + sauvegarde en BD
-// ─────────────────────────────────────────────
 export async function updateRoomProp(idx, prop, rawValue) {
   if (!state.rooms || !state.rooms[idx]) return;
   const room = state.rooms[idx];
-  const numericProps = ['minSenior', 'maxSenior', 'minResident', 'maxResident', 'minInf', 'maxInf', 'minTech', 'maxTech'];
+  const numericProps = ['minSenior', 'maxSenior', 'minResident', 'maxResident', 'minInf', 'maxInf', 'minTech', 'maxTech', 'min_senior', 'max_senior', 'min_resident', 'max_resident', 'min_inf', 'max_inf', 'min_tech', 'max_tech'];
 
   if (numericProps.includes(prop)) {
     const parsed = parseInt(rawValue, 10);
-    room[prop] = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    const val = isNaN(parsed) ? 0 : Math.max(0, parsed);
+    room[prop] = val;
+    // Mirror camelCase & snake_case
+    if (prop === 'minSenior' || prop === 'min_senior') { room.minSenior = val; room.min_senior = val; }
+    if (prop === 'maxSenior' || prop === 'max_senior') { room.maxSenior = val; room.max_senior = val; }
+    if (prop === 'minResident' || prop === 'min_resident') { room.minResident = val; room.min_resident = val; }
+    if (prop === 'maxResident' || prop === 'max_resident') { room.maxResident = val; room.max_resident = val; }
+    if (prop === 'minInf' || prop === 'min_inf') { room.minInf = val; room.min_inf = val; }
+    if (prop === 'maxInf' || prop === 'max_inf') { room.maxInf = val; room.max_inf = val; }
+    if (prop === 'minTech' || prop === 'min_tech') { room.minTech = val; room.min_tech = val; }
+    if (prop === 'maxTech' || prop === 'max_tech') { room.maxTech = val; room.max_tech = val; }
   } else {
     room[prop] = rawValue;
   }
@@ -126,61 +118,55 @@ export async function updateRoomProp(idx, prop, rawValue) {
   try {
     await persistRoom(room);
   } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur de sauvegarde de la salle');
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur de sauvegarde de la salle"}`);
   }
 }
 
-// ─────────────────────────────────────────────
-// Mode d'affectation des seniors
-// ─────────────────────────────────────────────
 export async function handleSeniorModeChange(idx, mode) {
   if (!state.rooms || !state.rooms[idx]) return;
   const room = state.rooms[idx];
+  room.senior_mode = mode;
   room.seniorMode = mode;
-  if (mode !== 'SELECTIVE') {
+  if (mode !== 'SELECTIVE' && mode !== 'SEULEMENT_CERTAINES') {
+    room.compatible_salle_ids = [];
     room.seniorCompatibleRooms = [];
   }
   renderRooms();
   try {
     await persistRoom(room);
-    if (mode === 'SELECTIVE') {
+    if (mode === 'SELECTIVE' || mode === 'SEULEMENT_CERTAINES') {
       openCompatibilityModal(idx);
     }
   } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur lors du changement de mode senior');
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur lors du changement de mode senior"}`);
   }
 }
 
-// ─────────────────────────────────────────────
-// Modale de configuration des salles compatibles
-// ─────────────────────────────────────────────
 export function openCompatibilityModal(idx) {
   if (!state.rooms || !state.rooms[idx]) return;
   currentEditingCompatRoomIdx = idx;
   const room = state.rooms[idx];
+  const listContainer = document.getElementById('compat-modal-room-list');
+  if (!listContainer) return;
 
-  const titleEl = document.getElementById('compat-modal-title');
-  if (titleEl) titleEl.textContent = `⚙️ Salles compatibles — ${room.name}`;
+  const currentCompat = (room.compatible_salle_ids || room.seniorCompatibleRooms || []).map(Number);
+  const otherRooms = state.rooms.filter((_, i) => i !== idx);
 
-  const listContainer = document.getElementById('compat-rooms-list');
-  if (listContainer) {
-    const otherRooms = state.rooms.filter((_, i) => i !== idx);
-    if (otherRooms.length === 0) {
-      listContainer.innerHTML = '<span style="font-size:12px; color:var(--text-dim);">Aucune autre salle configurée dans l\'application.</span>';
-    } else {
-      listContainer.innerHTML = otherRooms.map(other => {
-        const isChecked = room.seniorCompatibleRooms?.includes(String(other.id)) || room.seniorCompatibleRooms?.includes(String(other.name));
-        return `
-          <label style="display:flex; align-items:center; gap:10px; margin:0; text-transform:none; font-size:13px; cursor:pointer;">
-            <input type="checkbox" class="compat-room-checkbox" value="${other.id || other.name}" ${isChecked ? 'checked' : ''} style="width:16px; height:16px; margin:0;">
-            <span>${other.name}</span>
-          </label>
-        `;
-      }).join('');
-    }
+  if (otherRooms.length === 0) {
+    listContainer.innerHTML = '<p style="color:var(--text-faint); font-size:12px;">Aucune autre salle disponible.</p>';
+  } else {
+    listContainer.innerHTML = otherRooms.map(r => {
+      const isChecked = currentCompat.includes(Number(r.id));
+      return `
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+          <input type="checkbox" value="${r.id}" ${isChecked ? 'checked' : ''} class="compat-room-checkbox">
+          <span>${r.nom || r.name}</span>
+        </label>
+      `;
+    }).join('');
   }
 
-  const modal = document.getElementById('room-compatibility-modal');
+  const modal = document.getElementById('room-compat-modal');
   if (modal) {
     modal.classList.add('active');
     modal.style.display = 'flex';
@@ -188,7 +174,7 @@ export function openCompatibilityModal(idx) {
 }
 
 export function closeCompatibilityModal() {
-  const modal = document.getElementById('room-compatibility-modal');
+  const modal = document.getElementById('room-compat-modal');
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
@@ -199,56 +185,85 @@ export function closeCompatibilityModal() {
 export async function saveCompatibilityModal() {
   if (currentEditingCompatRoomIdx === null || !state.rooms[currentEditingCompatRoomIdx]) return;
   const room = state.rooms[currentEditingCompatRoomIdx];
-
-  const checkedIds = [];
+  const selected = [];
   document.querySelectorAll('.compat-room-checkbox:checked').forEach(cb => {
-    checkedIds.push(cb.value);
+    const num = parseInt(cb.value, 10);
+    if (!isNaN(num)) selected.push(num);
   });
-
-  room.seniorCompatibleRooms = checkedIds;
-
+  room.compatible_salle_ids = selected;
+  room.seniorCompatibleRooms = selected;
   try {
     await persistRoom(room);
     closeCompatibilityModal();
-    renderAll();
-    if (window.toast) window.toast(`✓ Salles compatibles configurées pour ${room.name}`);
+    renderRooms();
+    if (window.toast) window.toast('✓ Compatibilités enregistrées');
   } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur lors de l\'enregistrement des salles compatibles');
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur de sauvegarde"}`);
   }
 }
 
-// ─────────────────────────────────────────────
-// Modale de configuration d'indisponibilité
-// ─────────────────────────────────────────────
 export function openUnavailabilityModal(idx) {
   if (!state.rooms || !state.rooms[idx]) return;
   currentEditingUnavailRoomIdx = idx;
   const room = state.rooms[idx];
+  
+  const titleEl = document.getElementById('unavail-modal-room-name');
+  if (titleEl) titleEl.textContent = `Indisponibilités — ${room.nom || room.name}`;
+  
+  const startEl = document.getElementById('unavail-start');
+  const endEl = document.getElementById('unavail-end');
+  const reasonEl = document.getElementById('unavail-reason');
+  if (startEl) startEl.value = '';
+  if (endEl) endEl.value = '';
+  if (reasonEl) reasonEl.value = '';
 
-  const titleEl = document.getElementById('unavail-modal-title');
-  if (titleEl) titleEl.textContent = `🛠️ Indisponibilité — ${room.name}`;
+  renderRoomUnavailabilityHistory(room.id);
 
-  const isBrokenCb = document.getElementById('unavail-is-broken');
-  if (isBrokenCb) isBrokenCb.checked = !!room.isBroken;
-
-  const startInput = document.getElementById('unavail-start');
-  if (startInput) startInput.value = room.brokenStart || '';
-
-  const endInput = document.getElementById('unavail-end');
-  if (endInput) endInput.value = room.brokenEnd || '';
-
-  const reasonInput = document.getElementById('unavail-reason');
-  if (reasonInput) reasonInput.value = room.brokenReason || '';
-
-  const modal = document.getElementById('room-unavailability-modal');
+  const modal = document.getElementById('room-unavail-modal');
   if (modal) {
     modal.classList.add('active');
     modal.style.display = 'flex';
   }
 }
 
+export function renderRoomUnavailabilityHistory(salleId) {
+  const historyContainer = document.getElementById('unavail-history-list');
+  if (!historyContainer) return;
+
+  const list = state.indisponibilitesList.filter(i => Number(i.salle_id) === Number(salleId));
+  if (list.length === 0) {
+    historyContainer.innerHTML = '<p style="color:var(--text-faint); font-size:12px; margin:8px 0;">Aucune indisponibilité enregistrée.</p>';
+    return;
+  }
+
+  historyContainer.innerHTML = list.map(item => `
+    <div style="display:flex; justify-content:space-between; align-items:center; background:var(--panel-2); padding:6px 10px; border-radius:4px; margin-bottom:6px; border:1px solid var(--border); font-size:12px;">
+      <div>
+        <b>Du ${item.date_debut} au ${item.date_fin}</b>
+        <span style="color:var(--text-dim); margin-left:8px;">(${item.motif || 'Sans motif'})</span>
+      </div>
+      <button class="btn danger" style="padding:2px 6px; font-size:11px;" onclick="deleteIndisponibiliteItem(${item.id})">✕</button>
+    </div>
+  `).join('');
+}
+
+export async function deleteIndisponibiliteItem(id) {
+  try {
+    await api.deleteIndisponibilite(id);
+    state.indisponibilitesList = state.indisponibilitesList.filter(i => i.id !== id);
+    if (currentEditingUnavailRoomIdx !== null && state.rooms[currentEditingUnavailRoomIdx]) {
+      renderRoomUnavailabilityHistory(state.rooms[currentEditingUnavailRoomIdx].id);
+    }
+    renderRooms();
+    renderAll();
+    if (window.toast) window.toast('✓ Indisponibilité supprimée');
+  } catch (err) {
+    if (window.toast) window.toast('🛑 Erreur de suppression');
+  }
+}
+
 export function closeUnavailabilityModal() {
-  const modal = document.getElementById('room-unavailability-modal');
+  const modal = document.getElementById('room-unavail-modal');
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
@@ -259,48 +274,52 @@ export function closeUnavailabilityModal() {
 export async function saveUnavailabilityModal() {
   if (currentEditingUnavailRoomIdx === null || !state.rooms[currentEditingUnavailRoomIdx]) return;
   const room = state.rooms[currentEditingUnavailRoomIdx];
+  const start = document.getElementById('unavail-start')?.value;
+  const end = document.getElementById('unavail-end')?.value;
+  const reason = document.getElementById('unavail-reason')?.value?.trim() || '';
 
-  const isBroken = document.getElementById('unavail-is-broken')?.checked ?? true;
-  const start = document.getElementById('unavail-start')?.value || '';
-  const end = document.getElementById('unavail-end')?.value || '';
-  const reason = document.getElementById('unavail-reason')?.value.trim() || '';
-
-  room.isBroken = isBroken;
-  room.brokenStart = start;
-  room.brokenEnd = end;
-  room.brokenReason = reason;
+  if (!start || !end) {
+    if (window.toast) window.toast('⚠ Veuillez renseigner la date de début et de fin');
+    return;
+  }
 
   try {
-    await persistRoom(room);
-    closeUnavailabilityModal();
+    const saved = await api.createIndisponibilite({
+      salle_id: room.id,
+      date_debut: start,
+      date_fin: end,
+      motif: reason || 'Maintenance'
+    });
+    state.indisponibilitesList.push(saved);
+    renderRoomUnavailabilityHistory(room.id);
+    renderRooms();
     renderAll();
-    if (window.toast) window.toast(isBroken ? `⚠ ${room.name} configurée en indisponibilité` : `✓ ${room.name} remise en service`);
+    if (window.toast) window.toast('✓ Période d\'indisponibilité ajoutée');
   } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur de sauvegarde de l\'indisponibilité');
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur de sauvegarde"}`);
   }
 }
 
 export async function clearUnavailability(idx) {
   if (!state.rooms || !state.rooms[idx]) return;
   const room = state.rooms[idx];
-  room.isBroken = false;
-  room.brokenStart = '';
-  room.brokenEnd = '';
-  room.brokenReason = '';
-
-  try {
-    await persistRoom(room);
-    renderAll();
-    if (window.toast) window.toast(`✓ Indisponibilité retirée pour ${room.name}`);
-  } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur lors de la remise en service');
+  const toDelete = state.indisponibilitesList.filter(i => Number(i.salle_id) === Number(room.id));
+  for (const item of toDelete) {
+    try {
+      await api.deleteIndisponibilite(item.id);
+    } catch (e) {
+      console.warn("Erreur suppression indisp:", e);
+    }
   }
+  state.indisponibilitesList = state.indisponibilitesList.filter(i => Number(i.salle_id) !== Number(room.id));
+  renderRooms();
+  renderAll();
+  if (window.toast) window.toast('✓ Toutes les indisponibilités de cette salle ont été effacées');
 }
 
-// ─────────────────────────────────────────────
-// Modal ajout salle
-// ─────────────────────────────────────────────
 export function openAddRoomModal() {
+  const nomEl = document.getElementById('new-room-name');
+  if (nomEl) nomEl.value = '';
   const modal = document.getElementById('add-room-modal');
   if (modal) {
     modal.classList.add('active');
@@ -314,196 +333,132 @@ export function closeAddRoomModal() {
     modal.classList.remove('active');
     modal.style.display = 'none';
   }
-  const arName = document.getElementById('ar-name');
-  if (arName) arName.value = '';
 }
 
 export async function submitAddRoom() {
-  const nameInput = document.getElementById('ar-name');
-  const name = nameInput ? nameInput.value.trim() : '';
-
-  if (!name) {
-    if (window.toast) window.toast('⚠ Le nom de la salle est obligatoire');
+  const nom = document.getElementById('new-room-name')?.value?.trim();
+  if (!nom) {
+    if (window.toast) window.toast('⚠ Veuillez saisir le nom de la salle');
     return;
   }
+  const minSen = parseInt(document.getElementById('new-room-min-senior')?.value, 10) || 1;
+  const maxSen = parseInt(document.getElementById('new-room-max-senior')?.value, 10) || 2;
+  const minRes = parseInt(document.getElementById('new-room-min-res')?.value, 10) || 1;
+  const maxRes = parseInt(document.getElementById('new-room-max-res')?.value, 10) || 3;
+  const minInf = parseInt(document.getElementById('new-room-min-inf')?.value, 10) || 0;
+  const maxInf = parseInt(document.getElementById('new-room-max-inf')?.value, 10) || 1;
+  const minTech = parseInt(document.getElementById('new-room-min-tech')?.value, 10) || 1;
+  const maxTech = parseInt(document.getElementById('new-room-max-tech')?.value, 10) || 3;
+  const seniorMode = document.getElementById('new-room-senior-mode')?.value || 'EXCLUSIVE';
 
-  const newRoom = {
-    name:         name,
-    minSenior:    parseInt(document.getElementById('ar-min-senior')?.value,   10) || 0,
-    maxSenior:    parseInt(document.getElementById('ar-max-senior')?.value,   10) || 0,
-    minResident:  parseInt(document.getElementById('ar-min-resident')?.value, 10) || 0,
-    maxResident:  parseInt(document.getElementById('ar-max-resident')?.value, 10) || 0,
-    minInf:       parseInt(document.getElementById('ar-min-inf')?.value,      10) || 0,
-    maxInf:       parseInt(document.getElementById('ar-max-inf')?.value,      10) || 0,
-    minTech:      parseInt(document.getElementById('ar-min-tech')?.value,     10) || 0,
-    maxTech:      parseInt(document.getElementById('ar-max-tech')?.value,     10) || 0,
-    seniorMode:   'EXCLUSIVE',
-    seniorCompatibleRooms: [],
-    isBroken:     false,
-    brokenStart:  '',
-    brokenEnd:    '',
-    brokenReason: ''
+  const payload = {
+    nom,
+    min_senior: minSen,
+    max_senior: maxSen,
+    min_resident: minRes,
+    max_resident: maxRes,
+    min_inf: minInf,
+    max_inf: maxInf,
+    min_tech: minTech,
+    max_tech: maxTech,
+    senior_mode: seniorMode,
+    mode_compatibilite: 'AUCUNE'
   };
 
   try {
-    const saved = await api.createSalle(roomToPayload(newRoom));
-    const localRoom = apiRoomToLocal(saved);
-    if (!Array.isArray(state.rooms)) state.rooms = [];
-    state.rooms.push(localRoom);
-
+    const saved = await api.createSalle(payload);
+    state.rooms.push(apiRoomToLocal(saved));
     closeAddRoomModal();
+    renderRooms();
     renderAll();
-    if (window.toast) window.toast('✓ Nouvelle salle d\'examen configurée et enregistrée');
+    if (window.toast) window.toast('✓ Nouvelle salle créée');
   } catch (err) {
-    console.error(err);
-    if (window.toast) window.toast('🛑 Erreur lors de la configuration de la salle');
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur de création de la salle"}`);
   }
 }
 
-// ─────────────────────────────────────────────
-// deleteRoom : supprime de l'état local + BD
-// ─────────────────────────────────────────────
 export async function deleteRoom(idx) {
   if (!state.rooms || !state.rooms[idx]) return;
   const room = state.rooms[idx];
-  if (!confirm(`Voulez-vous vraiment supprimer la salle "${room.name}" ?`)) return;
-
+  if (!confirm(`Supprimer la salle "${room.nom || room.name}" ?`)) return;
   try {
-    if (room.id && typeof room.id === 'number') {
+    if (room.id) {
       await api.deleteSalle(room.id);
     }
     state.rooms.splice(idx, 1);
+    renderRooms();
     renderAll();
-    if (window.toast) window.toast(`✓ Salle "${room.name}" supprimée`);
+    if (window.toast) window.toast('✓ Salle supprimée');
   } catch (err) {
-    if (window.toast) window.toast('🛑 Erreur lors de la suppression de la salle');
+    if (window.toast) window.toast('🛑 Erreur de suppression de la salle');
   }
 }
 
-// ─────────────────────────────────────────────
-// renderRooms : affichage du tableau récapitulatif
-// ─────────────────────────────────────────────
+export function isRoomUnavailableOnDate(salleId, dateStr) {
+  return state.indisponibilitesList.some(i => {
+    if (Number(i.salle_id) !== Number(salleId)) return false;
+    return dateStr >= i.date_debut && dateStr <= i.date_fin;
+  });
+}
+
 export function renderRooms() {
   const tbody = document.getElementById('rooms-tbody');
   if (!tbody) return;
 
-  if (!Array.isArray(state.rooms) || state.rooms.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="12" style="padding:24px; text-align:center; color:var(--text-dim);">Aucune salle d\'examen configurée. Cliquer sur "+ Ajouter une salle" ci-dessus.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = state.rooms.map((room, idx) => {
-    const isBroken = !!room.isBroken;
-    const compatCount = (room.seniorCompatibleRooms || []).length;
-    const seniorMode = room.seniorMode || 'EXCLUSIVE';
-
-    // Formatage de l'indisponibilité
-    let unavailHtml = '';
-    if (!isBroken) {
-      unavailHtml = `
-        <button class="btn-unavail-add" type="button" onclick="openUnavailabilityModal(${idx})" title="Signaler une maintenance ou panne">
-          + Indisponibilité
-        </button>
-      `;
-    } else {
-      const datesStr = (room.brokenStart || room.brokenEnd)
-        ? `${room.brokenStart ? room.brokenStart.substring(5) : ''} → ${room.brokenEnd ? room.brokenEnd.substring(5) : ''}`
-        : 'Panne active';
-      unavailHtml = `
-        <div class="unavail-badge">
-          <div style="display:flex; justify-content:space-between; align-items:center; gap:6px;">
-            <span>Indisponible</span>
-            <div style="display:flex; gap:3px;">
-              <button type="button" onclick="openUnavailabilityModal(${idx})" style="background:none; border:none; color:#7f1d1d; cursor:pointer; font-size:11px; padding:0;" title="Modifier les détails">✎</button>
-              <button type="button" onclick="clearUnavailability(${idx})" style="background:none; border:none; color:#7f1d1d; cursor:pointer; font-size:11px; padding:0;" title="Remettre en service">✕</button>
-            </div>
-          </div>
-          <small style="font-size:10px; opacity:0.85;">${datesStr}</small>
-        </div>
-      `;
-    }
-
-    // Formatage du mode Senior
-    let seniorConfigHtml = `
-      <select class="room-mode-select" onchange="handleSeniorModeChange(${idx}, this.value)">
-        <option value="EXCLUSIVE" ${seniorMode === 'EXCLUSIVE' ? 'selected' : ''}>Exclusif — aucune autre salle</option>
-        <option value="COMBINABLE" ${seniorMode === 'COMBINABLE' ? 'selected' : ''}>Combinable — toutes salles</option>
-        <option value="SELECTIVE" ${seniorMode === 'SELECTIVE' ? 'selected' : ''}>Seulement avec certaines salles</option>
-      </select>
-    `;
-
-    if (seniorMode === 'SELECTIVE') {
-      seniorConfigHtml += `
-        <br>
-        <button class="btn-compat-config" type="button" onclick="openCompatibilityModal(${idx})">
-          Certaines salles (${compatCount}) ⚙
-        </button>
-      `;
-    }
+  tbody.innerHTML = (state.rooms || []).map((room, idx) => {
+    const roomIndisps = state.indisponibilitesList.filter(i => Number(i.salle_id) === Number(room.id));
+    const isCurrentlyBroken = roomIndisps.length > 0;
+    const sMode = room.senior_mode || room.seniorMode || 'EXCLUSIVE';
+    const compatCount = (room.compatible_salle_ids || room.seniorCompatibleRooms || []).length;
 
     return `
-      <tr class="${isBroken ? 'broken-row' : ''}">
-        <!-- COLONNE STICKY : SALLE & STATUT -->
-        <td class="sticky-col">
-          <div style="display:flex; flex-direction:column; gap:4px;">
-            <strong style="font-size:14px; font-weight:700; color:var(--text-primary);">${room.name || 'Salle sans nom'}</strong>
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="status-badge ${isBroken ? 'hors_service' : 'actif'}" style="font-size:10px; padding:2px 6px;">
-                ${isBroken ? 'Hors Service' : 'Opérationnel'}
-              </span>
-            </div>
-          </div>
-        </td>
-
-        <!-- SENIORS MIN / MAX -->
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.minSenior ?? 0}" onchange="updateRoomProp(${idx}, 'minSenior', this.value)">
-        </td>
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.maxSenior ?? 0}" onchange="updateRoomProp(${idx}, 'maxSenior', this.value)">
-        </td>
-
-        <!-- RÉSIDENTS MIN / MAX -->
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.minResident ?? 0}" onchange="updateRoomProp(${idx}, 'minResident', this.value)">
-        </td>
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.maxResident ?? 0}" onchange="updateRoomProp(${idx}, 'maxResident', this.value)">
-        </td>
-
-        <!-- INFIRMIERS MIN / MAX -->
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.minInf ?? 0}" onchange="updateRoomProp(${idx}, 'minInf', this.value)">
-        </td>
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.maxInf ?? 0}" onchange="updateRoomProp(${idx}, 'maxInf', this.value)">
-        </td>
-
-        <!-- TECHNICIENS MIN / MAX -->
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.minTech ?? 0}" onchange="updateRoomProp(${idx}, 'minTech', this.value)">
-        </td>
-        <td style="text-align:center;">
-          <input type="number" class="room-num-input" min="0" value="${room.maxTech ?? 0}" onchange="updateRoomProp(${idx}, 'maxTech', this.value)">
-        </td>
-
-        <!-- AFFECTATION SENIORS -->
+      <tr>
+        <td><b>${room.nom || room.name}</b></td>
         <td>
-          ${seniorConfigHtml}
+          <input type="number" min="0" max="10" value="${room.min_senior ?? room.minSenior ?? 1}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'min_senior', this.value)">
+          -
+          <input type="number" min="0" max="10" value="${room.max_senior ?? room.maxSenior ?? 2}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'max_senior', this.value)">
         </td>
-
-        <!-- INDISPONIBILITÉ -->
         <td>
-          ${unavailHtml}
+          <input type="number" min="0" max="10" value="${room.min_resident ?? room.minResident ?? 1}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'min_resident', this.value)">
+          -
+          <input type="number" min="0" max="10" value="${room.max_resident ?? room.maxResident ?? 3}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'max_resident', this.value)">
         </td>
-
-        <!-- ACTIONS -->
-        <td style="text-align:center;">
-          <button class="btn danger" type="button" style="padding:4px 8px; font-size:12px;" onclick="deleteRoom(${idx})" title="Supprimer la salle">
-            🗑
-          </button>
+        <td>
+          <input type="number" min="0" max="10" value="${room.min_inf ?? room.minInf ?? 0}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'min_inf', this.value)">
+          -
+          <input type="number" min="0" max="10" value="${room.max_inf ?? room.maxInf ?? 1}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'max_inf', this.value)">
+        </td>
+        <td>
+          <input type="number" min="0" max="10" value="${room.min_tech ?? room.minTech ?? 1}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'min_tech', this.value)">
+          -
+          <input type="number" min="0" max="10" value="${room.max_tech ?? room.maxTech ?? 3}" style="width:50px; padding:2px;" onchange="updateRoomProp(${idx}, 'max_tech', this.value)">
+        </td>
+        <td>
+          <select style="width:170px; padding:4px;" onchange="handleSeniorModeChange(${idx}, this.value)">
+            <option value="EXCLUSIVE" ${sMode === 'EXCLUSIVE' ? 'selected' : ''}>Exclusif</option>
+            <option value="COMBINABLE" ${sMode === 'COMBINABLE' ? 'selected' : ''}>Combinable (Toutes)</option>
+            <option value="SELECTIVE" ${sMode === 'SELECTIVE' || sMode === 'SEULEMENT_CERTAINES' ? 'selected' : ''}>Seulement certaines</option>
+          </select>
+          ${(sMode === 'SELECTIVE' || sMode === 'SEULEMENT_CERTAINES') ? `
+            <button class="btn secondary" style="padding:2px 6px; font-size:11px; margin-left:4px;" onclick="openCompatibilityModal(${idx})">⚙ (${compatCount})</button>
+          ` : ''}
+        </td>
+        <td>
+          ${isCurrentlyBroken ? `
+            <span style="color:#d9534f; font-weight:600; font-size:12px;">⚠️ ${roomIndisps.length} période(s)</span>
+          ` : `
+            <span style="color:#5cb85c; font-weight:600; font-size:12px;">✓ Disponible</span>
+          `}
+          <button class="btn secondary" style="padding:2px 6px; font-size:11px; margin-left:6px;" onclick="openUnavailabilityModal(${idx})">📅 Gérer</button>
+        </td>
+        <td>
+          <button class="btn danger" style="padding:4px 8px; font-size:11px;" onclick="deleteRoom(${idx})">✕</button>
         </td>
       </tr>
     `;
   }).join('');
+
+  const countInd = document.getElementById('count-rooms');
+  if (countInd) countInd.textContent = (state.rooms || []).length;
 }

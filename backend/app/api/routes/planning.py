@@ -4,6 +4,8 @@ from typing import List
 
 from app.db.database import get_db
 from app.models.planning import PlanningSemaine
+from app.models.salle import Salle
+from app.models.personnel import Personnel
 from app.schemas.planning import PlanningSemaineCreate, PlanningSemaineResponse
 
 router = APIRouter()
@@ -41,10 +43,6 @@ def get_planning_by_week(semaine_code: str, db: Session = Depends(get_db)):
     return item
 
 
-from app.models.salle import Salle
-from app.models.personnel import Personnel
-
-
 def _validate_senior_room_combinations(payload: dict, db: Session):
     snapshot_salles = payload.get("snapshot_salles") or []
     snapshot_personnel = payload.get("snapshot_personnel") or []
@@ -61,27 +59,29 @@ def _validate_senior_room_combinations(payload: dict, db: Session):
     for r in db_salles:
         r_id = str(r.id)
         r_name = r.nom
+        compat_ids = [str(c.id) for c in r.compatible_rooms]
         if r_id not in rooms_by_key:
             rooms_by_key[r_id] = {
-                "id": r.id, "name": r.nom, "seniorMode": r.senior_mode,
-                "seniorCompatibleRooms": r.senior_compatible_rooms.split(",") if r.senior_compatible_rooms else []
+                "id": r.id, "name": r.nom, "senior_mode": r.senior_mode,
+                "compatible_salle_ids": compat_ids
             }
         if r_name not in rooms_by_key:
             rooms_by_key[r_name] = {
-                "id": r.id, "name": r.nom, "seniorMode": r.senior_mode,
-                "seniorCompatibleRooms": r.senior_compatible_rooms.split(",") if r.senior_compatible_rooms else []
+                "id": r.id, "name": r.nom, "senior_mode": r.senior_mode,
+                "compatible_salle_ids": compat_ids
             }
 
     seniors_mats = set()
     for p in snapshot_personnel:
-        cat = p.get("cat") or p.get("role")
+        cat = p.get("categorie") or p.get("cat") or p.get("role")
         if cat == "SENIOR":
-            seniors_mats.add(p.get("matricule"))
+            seniors_mats.add(str(p.get("matricule") or p.get("id")))
 
-    db_personnel = db.query(Personnel).filter(Personnel.role == "SENIOR").all()
+    db_personnel = db.query(Personnel).filter(Personnel.categorie == "SENIOR").all()
     for p in db_personnel:
         if p.matricule:
             seniors_mats.add(p.matricule)
+        seniors_mats.add(str(p.id))
 
     grid = affectations.get("gridAssignments") or {}
     additional = affectations.get("additionalSeniorAssignments") or {}
@@ -126,8 +126,8 @@ def _validate_senior_room_combinations(payload: dict, db: Session):
 
                 r1_name = r1.get("name") or r1.get("nom") or str(r1_key)
                 r2_name = r2.get("name") or r2.get("nom") or str(r2_key)
-                r1_mode = r1.get("seniorMode") or r1.get("senior_mode") or "EXCLUSIVE"
-                r2_mode = r2.get("seniorMode") or r2.get("senior_mode") or "EXCLUSIVE"
+                r1_mode = r1.get("senior_mode") or r1.get("seniorMode") or "EXCLUSIVE"
+                r2_mode = r2.get("senior_mode") or r2.get("seniorMode") or "EXCLUSIVE"
 
                 if r1_mode == "EXCLUSIVE":
                     raise HTTPException(
@@ -141,28 +141,46 @@ def _validate_senior_room_combinations(payload: dict, db: Session):
                     )
 
                 def permits(room, other):
-                    rmode = room.get("seniorMode") or room.get("senior_mode") or "EXCLUSIVE"
+                    rmode = room.get("senior_mode") or room.get("seniorMode") or "EXCLUSIVE"
                     if rmode == "COMBINABLE":
                         return True
-                    if rmode == "SELECTIVE":
-                        compat = room.get("seniorCompatibleRooms") or room.get("senior_compatible_rooms") or []
+                    if rmode in ("SELECTIVE", "SEULEMENT_CERTAINES"):
+                        compat = room.get("compatible_salle_ids") or room.get("seniorCompatibleRooms") or []
                         if isinstance(compat, str):
                             compat = [c.strip() for c in compat.split(",") if c.strip()]
                         other_id = str(other.get("id"))
                         other_name = (other.get("name") or other.get("nom") or "").strip()
-                        return (other_id in compat) or (other_name in compat)
+                        return (other_id in [str(c) for c in compat]) or (other_name in compat)
                     return False
 
-                if not permits(r1, r2):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Affectation impossible : Cette salle ({r1_name}) ne peut pas être combinée avec {r2_name} selon sa configuration."
-                    )
-                if not permits(r2, r1):
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Affectation impossible : Cette salle ({r2_name}) ne peut pas être combinée avec {r1_name} selon sa configuration."
-                    )
+                # RÈGLE MÉTIER: Si A est COMBINABLE et B est SÉLECTIF, la combinaison est autorisée si B a sélectionné A.
+                # Donc:
+                # Si les deux sont COMBINABLE -> OK
+                # Si un est COMBINABLE et l'autre est SELECTIF -> le SELECTIF doit avoir sélectionné le COMBINABLE
+                # Si les deux sont SELECTIF -> chacun doit avoir sélectionné l'autre
+                r1_is_comb = (r1_mode == "COMBINABLE")
+                r2_is_comb = (r2_mode == "COMBINABLE")
+
+                if r1_is_comb and r2_is_comb:
+                    pass
+                elif r1_is_comb and not r2_is_comb:
+                    if not permits(r2, r1):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Affectation impossible : La salle {r2_name} ne permet pas d'être combinée avec {r1_name}."
+                        )
+                elif not r1_is_comb and r2_is_comb:
+                    if not permits(r1, r2):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Affectation impossible : La salle {r1_name} ne permet pas d'être combinée avec {r2_name}."
+                        )
+                else:
+                    if not permits(r1, r2) or not permits(r2, r1):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Affectation impossible : Les salles {r1_name} et {r2_name} ne sont pas compatibles entre elles."
+                        )
 
 
 @router.post("/", response_model=PlanningSemaineResponse)
@@ -188,4 +206,3 @@ def save_planning(data: PlanningSemaineCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(item)
     return item
-

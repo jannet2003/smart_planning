@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -9,48 +9,28 @@ from app.schemas.salle import SalleCreate, SalleUpdate, SalleResponse
 router = APIRouter()
 
 
-def _payload_from_model(data):
-    if hasattr(data, "model_dump"):
-        return data.model_dump()
-    return data.dict()
-
-
-def _sync_salle_compatibility(item: Salle, senior_mode: str, compatible_rooms_raw: Optional[str], db: Session):
-    if senior_mode != "SELECTIVE":
-        item.compatible_rooms.clear()
-        item.senior_compatible_rooms = ""
-        return
-
-    room_tokens = [r.strip() for r in str(compatible_rooms_raw or "").split(',') if r.strip()]
-    if not room_tokens:
-        item.compatible_rooms.clear()
-        item.senior_compatible_rooms = ""
-        return
-
-    all_salles = db.query(Salle).filter(Salle.id != item.id).all()
-    matching_salles = []
-    for salle in all_salles:
-        s_id_str = str(salle.id)
-        s_nom_str = (salle.nom or "").strip().lower()
-        for token in room_tokens:
-            t_lower = token.lower()
-            if token == s_id_str or t_lower == s_nom_str:
-                if salle not in matching_salles:
-                    matching_salles.append(salle)
-                break
-    item.compatible_rooms = matching_salles
-    item.senior_compatible_rooms = ",".join(str(s.id) for s in matching_salles) if matching_salles else ",".join(room_tokens)
+def _format_salle(item: Salle) -> dict:
+    return {
+        "id": item.id,
+        "nom": item.nom,
+        "min_senior": item.min_senior,
+        "max_senior": item.max_senior,
+        "min_resident": item.min_resident,
+        "max_resident": item.max_resident,
+        "min_inf": item.min_inf,
+        "max_inf": item.max_inf,
+        "min_tech": item.min_tech,
+        "max_tech": item.max_tech,
+        "senior_mode": item.senior_mode or "EXCLUSIVE",
+        "mode_compatibilite": item.mode_compatibilite or "AUCUNE",
+        "compatible_salle_ids": [c.id for c in item.compatible_rooms] if item.compatible_rooms else []
+    }
 
 
 @router.get("/", response_model=List[SalleResponse])
-def get_all_salles(
-    actif: Optional[bool] = Query(None, description="Filtrer par état actif"),
-    db: Session = Depends(get_db),
-):
-    query = db.query(Salle)
-    if actif is not None:
-        query = query.filter(Salle.actif == actif)
-    return query.all()
+def get_all_salles(db: Session = Depends(get_db)):
+    items = db.query(Salle).order_by(Salle.id.asc()).all()
+    return [_format_salle(item) for item in items]
 
 
 @router.get("/{salle_id}", response_model=SalleResponse)
@@ -58,7 +38,7 @@ def get_salle(salle_id: int, db: Session = Depends(get_db)):
     item = db.query(Salle).filter(Salle.id == salle_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Salle non trouvée")
-    return item
+    return _format_salle(item)
 
 
 @router.post("/", response_model=SalleResponse)
@@ -66,22 +46,29 @@ def create_salle(data: SalleCreate, db: Session = Depends(get_db)):
     if not data.nom or not data.nom.strip():
         raise HTTPException(status_code=422, detail="Le nom de la salle est obligatoire")
 
-    payload = _payload_from_model(data)
-    payload["nom"] = payload.get("nom", "").strip()
-    payload["actif"] = payload.get("actif") if payload.get("actif") is not None else True
-
-    mode = payload.get("senior_mode", "EXCLUSIVE")
-    compat_raw = payload.pop("senior_compatible_rooms", "")
-
-    item = Salle(**payload)
+    item = Salle(
+        nom=data.nom.strip(),
+        min_senior=data.min_senior,
+        max_senior=data.max_senior,
+        min_resident=data.min_resident,
+        max_resident=data.max_resident,
+        min_inf=data.min_inf,
+        max_inf=data.max_inf,
+        min_tech=data.min_tech,
+        max_tech=data.max_tech,
+        senior_mode=data.senior_mode or "EXCLUSIVE",
+        mode_compatibilite=data.mode_compatibilite or "AUCUNE"
+    )
     db.add(item)
     db.flush()
 
-    _sync_salle_compatibility(item, mode, compat_raw, db)
+    if data.compatible_salle_ids:
+        compat_rooms = db.query(Salle).filter(Salle.id.in_(data.compatible_salle_ids), Salle.id != item.id).all()
+        item.compatible_rooms = compat_rooms
 
     db.commit()
     db.refresh(item)
-    return item
+    return _format_salle(item)
 
 
 @router.put("/{salle_id}", response_model=SalleResponse)
@@ -90,25 +77,29 @@ def update_salle(salle_id: int, data: SalleUpdate, db: Session = Depends(get_db)
     if not item:
         raise HTTPException(status_code=404, detail="Salle non trouvée")
 
-    update_data = _payload_from_model(data)
-    if not update_data:
-        raise HTTPException(status_code=422, detail="Aucune donnée à mettre à jour")
+    if data.nom is not None:
+        new_nom = data.nom.strip()
+        if not new_nom:
+            raise HTTPException(status_code=422, detail="Le nom de la salle ne peut pas être vide")
+        item.nom = new_nom
 
-    mode_provided = "senior_mode" in update_data
-    compat_provided = "senior_compatible_rooms" in update_data
+    for field in ["min_senior", "max_senior", "min_resident", "max_resident", "min_inf", "max_inf", "min_tech", "max_tech"]:
+        val = getattr(data, field, None)
+        if val is not None:
+            setattr(item, field, val)
 
-    new_mode = update_data.get("senior_mode", item.senior_mode or "EXCLUSIVE")
-    new_compat_raw = update_data.get("senior_compatible_rooms", item.senior_compatible_rooms or "")
+    if data.senior_mode is not None:
+        item.senior_mode = data.senior_mode
+    if data.mode_compatibilite is not None:
+        item.mode_compatibilite = data.mode_compatibilite
 
-    for field, value in update_data.items():
-        setattr(item, field, value)
-
-    if mode_provided or compat_provided:
-        _sync_salle_compatibility(item, new_mode, new_compat_raw, db)
+    if data.compatible_salle_ids is not None:
+        compat_rooms = db.query(Salle).filter(Salle.id.in_(data.compatible_salle_ids), Salle.id != item.id).all()
+        item.compatible_rooms = compat_rooms
 
     db.commit()
     db.refresh(item)
-    return item
+    return _format_salle(item)
 
 
 @router.delete("/{salle_id}")
@@ -116,10 +107,47 @@ def delete_salle(salle_id: int, db: Session = Depends(get_db)):
     item = db.query(Salle).filter(Salle.id == salle_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Salle non trouvée")
-    if hasattr(item, "personnels"):
-        item.personnels.clear()
-    if hasattr(item, "compatible_rooms"):
-        item.compatible_rooms.clear()
+    item.personnels.clear()
+    item.compatible_rooms.clear()
     db.delete(item)
     db.commit()
     return {"message": "Salle supprimée avec succès"}
+
+
+# Compatibilités entre salles (Sous-routes REST explicites)
+@router.get("/{salle_id}/compatibilites")
+def get_salle_compatibilites(salle_id: int, db: Session = Depends(get_db)):
+    item = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    return [{"id": c.id, "nom": c.nom} for c in item.compatible_rooms]
+
+
+@router.post("/{salle_id}/compatibilites/{compat_id}")
+def add_salle_compatibilite(salle_id: int, compat_id: int, db: Session = Depends(get_db)):
+    if salle_id == compat_id:
+        raise HTTPException(status_code=400, detail="Une salle ne peut pas être déclarée compatible avec elle-même")
+    item = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    target = db.query(Salle).filter(Salle.id == compat_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Salle cible non trouvée")
+    if target not in item.compatible_rooms:
+        item.compatible_rooms.append(target)
+        db.commit()
+    return {"message": f"Salle {target.nom} ajoutée aux compatibilités de {item.nom}", "compatible_salle_ids": [c.id for c in item.compatible_rooms]}
+
+
+@router.delete("/{salle_id}/compatibilites/{compat_id}")
+def remove_salle_compatibilite(salle_id: int, compat_id: int, db: Session = Depends(get_db)):
+    item = db.query(Salle).filter(Salle.id == salle_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    target = db.query(Salle).filter(Salle.id == compat_id).first()
+    if not target:
+        raise HTTPException(status_code=404, detail="Salle cible non trouvée")
+    if target in item.compatible_rooms:
+        item.compatible_rooms.remove(target)
+        db.commit()
+    return {"message": f"Salle {target.nom} retirée des compatibilités de {item.nom}", "compatible_salle_ids": [c.id for c in item.compatible_rooms]}

@@ -6,7 +6,6 @@ import { initLeaves, renderLeaveTable, totalLeaveDays } from './components/leave
 import { initCalendar, renderHolidaysTable } from './components/calendar.js';
 import { initPlanning, renderRestitution, updateArchivesDropdown } from './components/planning.js';
 import { initExtDuty, renderExtDutyTab } from './components/extDuty.js';
-import { defaultStaff, defaultRooms } from './utils/appSeedData.js';
 
 // ---------- Initialisation des contrôleurs ----------
 initStaff();
@@ -29,25 +28,20 @@ window.toast = function(msg) {
 window.switchTab = function(tabNum) {
   const teamLayout = document.getElementById('team-layout') || document.getElementById('subnav-team');
 
-  // Désactiver tous les boutons principaux et tous les panels
   document.querySelectorAll('.tabbtn').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
 
-  // Activer le bouton principal cliqué
   const btn = document.querySelector(`.tabbtn[data-tab="${tabNum}"]`);
   if (btn) btn.classList.add('active');
 
   if (tabNum === 'team') {
-    // Afficher la section Gestion de l'équipe (Sidebar + Contenu)
     if (teamLayout) teamLayout.classList.add('visible');
-    // Afficher le dernier sous-onglet actif (Personnel par défaut)
     const activeSubBtn = document.querySelector('.subnav-btn.active');
     const activeSubId = activeSubBtn ? activeSubBtn.dataset.subtab : '1';
     const subPanel = document.getElementById(`tab${activeSubId}`);
     if (subPanel) subPanel.classList.add('active');
     if (String(activeSubId) === '7') renderExtDutyTab();
   } else {
-    // Cacher la section Gestion de l'équipe
     if (teamLayout) teamLayout.classList.remove('visible');
     const panel = document.getElementById(`tab${tabNum}`);
     if (panel) panel.classList.add('active');
@@ -57,19 +51,16 @@ window.switchTab = function(tabNum) {
 };
 
 window.switchSubTab = function(subTabNum) {
-  // Mettre à jour les boutons de sous-navigation
   document.querySelectorAll('.subnav-btn').forEach(b => b.classList.remove('active'));
   const subBtn = document.querySelector(`.subnav-btn[data-subtab="${subTabNum}"]`);
   if (subBtn) subBtn.classList.add('active');
 
-  // Afficher uniquement le panel correspondant (parmi tab1, tab2, tab7)
   document.querySelectorAll('.tabpanel').forEach(p => p.classList.remove('active'));
   const panel = document.getElementById(`tab${subTabNum}`);
   if (panel) panel.classList.add('active');
 
   if (subTabNum === 7) renderExtDutyTab();
 };
-
 
 window.updateHeaderStats = function() {
   const sS = document.getElementById('statSeniors');
@@ -84,148 +75,82 @@ window.updateHeaderStats = function() {
   if (sA) sA.textContent = state.staff.filter(s => totalLeaveDays(s.matricule) > 60).length;
 };
 
-async function seedAndLoadData() {
+async function loadDataFromDB() {
   try {
     const safeJson = async (request, fallback = []) => {
       try {
         const response = await request();
         return Array.isArray(response) ? response : fallback;
       } catch (error) {
-        console.warn('API unavailable, using fallback', error);
+        console.warn('API fetch fallback', error);
         return fallback;
       }
     };
 
-    // 1. Seeding / Vérification du Personnel par défaut
-    const existingStaff = await safeJson(() => api.fetchPersonnel(), []);
-    for (const agent of defaultStaff) {
-      const exists = existingStaff.some(s => {
-        const fullName = (s.nom || '').trim().toLowerCase();
-        return fullName.includes(agent.name.toLowerCase());
-      });
-      if (!exists) {
-        console.log(`Seeding de l'agent manquant (${agent.name})...`);
-        try {
-          await api.createPersonnel({
-            nom: agent.name,
-            role: agent.cat,
-            statut: agent.status,
-            actif: agent.status === 'actif',
-            allowed_rooms: (agent.allowedRooms || []).join(',')
-          });
-        } catch (e) {
-          console.warn(`Erreur lors du seeding de ${agent.name}:`, e);
-        }
-      }
-    }
-
-    // 2. Seeding / Vérification des Salles par défaut
-    const existingRooms = await safeJson(() => api.fetchSalles(), []);
-    for (const room of defaultRooms) {
-      const exists = existingRooms.some(r => r.nom.toLowerCase() === room.name.toLowerCase());
-      if (!exists) {
-        console.log(`Seeding de la salle manquante (${room.name})...`);
-        try {
-          await api.createSalle({
-            nom:          room.name,
-            actif:        !room.isBroken,
-            min_senior:   room.minSenior,
-            max_senior:   room.maxSenior,
-            min_resident: room.minResident,
-            max_resident: room.maxResident,
-            min_inf:      room.minInf,
-            max_inf:      room.maxInf,
-            min_tech:     room.minTech,
-            max_tech:     room.maxTech,
-            senior_mode:  room.seniorMode,
-            senior_compatible_rooms: (room.seniorCompatibleRooms || []).join(','),
-            is_broken:    room.isBroken,
-            broken_start: room.brokenStart  || '',
-            broken_end:   room.brokenEnd    || '',
-            broken_reason: room.brokenReason || ''
-          });
-        } catch (e) {
-          console.warn(`Erreur lors du seeding de la salle ${room.name}:`, e);
-        }
-      }
-    }
-
-    // 3. Charger les salles depuis la BD
-    const dbRooms = await safeJson(() => api.fetchSalles(), []);
-    if (dbRooms.length > 0) {
-      state.rooms = dbRooms.map(r => apiRoomToLocal(r));
-    } else {
-      state.rooms = defaultRooms;
-    }
-
-    // 4. Charger le personnel complet depuis la BD
+    // 1. Charger le Personnel depuis la base
     const dbStaff = await safeJson(() => api.fetchPersonnel(), []);
-    if (dbStaff.length > 0) {
-      state.staff = dbStaff.map(s => {
-        const fullName = (s.nom || '').trim();
-        const subCat = s.role;
+    state.staff = dbStaff.map(s => ({
+      id: s.id,
+      matricule: s.matricule,
+      name: s.nom,
+      cat: s.categorie,
+      status: s.statut || 'actif',
+      salle_ids: s.salle_ids || []
+    }));
 
-        let allowedRooms = state.rooms.map(r => String(r.id || r.name));
-        if (s.allowed_rooms !== undefined && s.allowed_rooms !== null && s.allowed_rooms !== '') {
-          allowedRooms = s.allowed_rooms.split(',').filter(Boolean);
-        } else {
-          if (subCat === 'INF') allowedRooms = state.rooms.filter(r => ['Scanner', 'Radio', 'Échographie / Doppler'].includes(r.name)).map(r => String(r.id || r.name));
-        }
+    // 2. Charger les Salles depuis la base
+    const dbRooms = await safeJson(() => api.fetchSalles(), []);
+    state.rooms = dbRooms.map(r => apiRoomToLocal(r));
 
-        const status = s.statut || (s.actif ? 'actif' : 'retrait');
+    // 3. Charger les Congés depuis la base
+    const dbConges = await safeJson(() => api.fetchConges(), []);
+    state.leavesList = dbConges;
 
-        return {
-          id: s.id,
-          matricule: s.matricule || `ID-${s.id}`,
-          name: fullName,
-          cat: subCat,
-          status: status,
-          allowedRooms: allowedRooms
-        };
-      });
-    } else {
-      state.staff = defaultStaff;
-    }
+    // 4. Charger les Indisponibilités depuis la base
+    const dbIndisps = await safeJson(() => api.fetchIndisponibilites(), []);
+    state.indisponibilitesList = dbIndisps;
 
-    // 5. Charger les plannings enregistrés depuis la BD
+    // 5. Charger les Jours Fériés depuis la base
+    const dbFeries = await safeJson(() => api.fetchJoursFeries(), []);
+    state.holidays = dbFeries.map(h => ({
+      id: h.id,
+      date: h.date,
+      name: h.libelle,
+      libelle: h.libelle
+    }));
+
+    // 6. Charger l'historique des plannings sauvegardés
     const dbPlannings = await safeJson(() => api.fetchPlannings(), []);
+    state.archives = {};
     dbPlannings.forEach(p => {
       const key = `${p.semaine_code}_DB_${p.id}`;
       state.archives[key] = {
-        name: `Semaine du ${p.semaine_code} (Sauvegardé)`,
+        name: `Semaine du ${p.semaine_code} (Validé)`,
         start: p.semaine_code,
-        schedule: p.affectations
+        schedule: p.affectations,
+        snapshotPersonnel: p.snapshot_personnel,
+        snapshotSalles: p.snapshot_salles
       };
     });
-    updateArchivesDropdown();
 
-    // Rendu final après chargement
     state.ui.isHydrated = true;
+    updateArchivesDropdown();
     renderAll();
-    console.log("Données initialisées et synchronisées avec succès !");
+    window.updateHeaderStats();
+    console.log('Données hydratées depuis SQLite avec succès !');
   } catch (err) {
-    console.error("Erreur d'initialisation des données:", err);
-    window.toast("🛑 Erreur d'initialisation avec l'API Back-End.");
-    state.staff = defaultStaff;
-    state.rooms = defaultRooms;
-    state.ui.isHydrated = true;
-    renderAll();
+    console.error("Erreur d'hydratation des données:", err);
   }
 }
 
-// ---------- Enregistrement du Dispatcher de Rendu ----------
-registerListener(() => {
-  window.updateHeaderStats();
-  renderStaffTable();
-  populateStaffSelects();
-  renderLeaveTable();
-  renderHolidaysTable();
-  renderRooms();
-  renderRestitution();
-  renderExtDutyTab();
-});
-
-// ---------- Démarrage de l'Application ----------
+// Initialisation au chargement du DOM
 document.addEventListener('DOMContentLoaded', () => {
-  seedAndLoadData();
+  registerListener(renderStaffTable);
+  registerListener(renderRooms);
+  registerListener(renderLeaveTable);
+  registerListener(renderHolidaysTable);
+  registerListener(populateStaffSelects);
+  registerListener(window.updateHeaderStats);
+
+  loadDataFromDB();
 });

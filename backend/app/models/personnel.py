@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, ForeignKey, Table
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -9,17 +9,27 @@ personnel_salle = Table(
     Column('salle_id', Integer, ForeignKey('salle.id', ondelete='CASCADE'), primary_key=True)
 )
 
+class CongePersonnel(Base):
+    __tablename__ = "conge_personnel"
+
+    id           = Column(Integer, primary_key=True, index=True)
+    personnel_id = Column(Integer, ForeignKey('personnel.id', ondelete='CASCADE'), nullable=False)
+    type         = Column(String, nullable=False)  # 'bloc_30' | 'flexible'
+    date_debut   = Column(String, nullable=False)
+    date_fin     = Column(String, nullable=False)
+    raison       = Column(String, nullable=True)
+
+    personnel    = relationship("Personnel", back_populates="conges")
+
+
 class Personnel(Base):
     __tablename__ = "personnel"
 
-    id            = Column(Integer, primary_key=True, index=True)
-    matricule     = Column(String, nullable=True, index=True)
-    nom           = Column(String, nullable=False)               # Nom et prénom combinés
-    role          = Column(String, nullable=False)               # SENIOR, RESIDENT_1ERE, TECH…
-    statut        = Column(String, default='actif')              # 'actif' | 'retrait' | 'hors_service'
-    actif         = Column(Boolean, default=True)
-    allowed_rooms = Column(String, default='')                   # IDs séparés par virgule
+    id        = Column(Integer, primary_key=True, index=True)
+    matricule = Column(String, unique=True, nullable=False, index=True)
+    nom       = Column(String, nullable=False)
+    categorie = Column(String, nullable=False)
+    statut    = Column(String, nullable=False, default='actif')
 
-    salles        = relationship("Salle", secondary=personnel_salle, backref="personnels", lazy="joined")
-
-
+    salles    = relationship("Salle", secondary=personnel_salle, back_populates="personnels", lazy="joined")
+    conges    = relationship("CongePersonnel", back_populates="personnel", cascade="all, delete-orphan", lazy="selectin")

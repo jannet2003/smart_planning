@@ -1,3 +1,55 @@
-from app.schemas.personnel import PersonnelBase, PersonnelCreate, PersonnelResponse
-from app.schemas.salle import SalleBase, SalleCreate, SalleResponse
-from app.schemas.planning import PlanningSemaineBase, PlanningSemaineCreate, PlanningSemaineResponse
+from app.schemas.personnel import (
+    PersonnelBase,
+    PersonnelCreate,
+    PersonnelUpdate,
+    PersonnelResponse,
+    CongePersonnelBase,
+    CongePersonnelCreate,
+    CongePersonnelUpdate,
+    CongePersonnelResponse,
+)
+from app.schemas.salle import (
+    SalleBase,
+    SalleCreate,
+    SalleUpdate,
+    SalleResponse,
+    IndisponibiliteSalleBase,
+    IndisponibiliteSalleCreate,
+    IndisponibiliteSalleUpdate,
+    IndisponibiliteSalleResponse,
+)
+from app.schemas.planning import (
+    JourFerieBase,
+    JourFerieCreate,
+    JourFerieUpdate,
+    JourFerieResponse,
+    PlanningSemaineBase,
+    PlanningSemaineCreate,
+    PlanningSemaineResponse,
+)
+
+__all__ = [
+    "PersonnelBase",
+    "PersonnelCreate",
+    "PersonnelUpdate",
+    "PersonnelResponse",
+    "CongePersonnelBase",
+    "CongePersonnelCreate",
+    "CongePersonnelUpdate",
+    "CongePersonnelResponse",
+    "SalleBase",
+    "SalleCreate",
+    "SalleUpdate",
+    "SalleResponse",
+    "IndisponibiliteSalleBase",
+    "IndisponibiliteSalleCreate",
+    "IndisponibiliteSalleUpdate",
+    "IndisponibiliteSalleResponse",
+    "JourFerieBase",
+    "JourFerieCreate",
+    "JourFerieUpdate",
+    "JourFerieResponse",
+    "PlanningSemaineBase",
+    "PlanningSemaineCreate",
+    "PlanningSemaineResponse",
+]

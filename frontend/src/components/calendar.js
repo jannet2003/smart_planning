@@ -1,4 +1,5 @@
 import { state, renderAll } from '../state.js';
+import * as api from '../api/api.js';
 
 let calendarCurrentYear = 2026;
 let calendarCurrentMonth = 0;
@@ -14,34 +15,57 @@ export function initCalendar() {
   window.toggleDayHoliday = toggleDayHoliday;
 }
 
+window.getHoliday = getHoliday;
+window.addHoliday = addHoliday;
+window.removeHoliday = removeHoliday;
+window.renderHolidaysTable = renderHolidaysTable;
+window.renderInteractiveCalendar = renderInteractiveCalendar;
+window.navigateCalendar = navigateCalendar;
+window.syncCalendarWithInputDate = syncCalendarWithInputDate;
+window.toggleDayHoliday = toggleDayHoliday;
+
 export function getHoliday(dateStr) {
-  return state.holidays.find(h => h.date === dateStr);
+  return (state.holidays || []).find(h => h.date === dateStr);
 }
 
-export function addHoliday() {
-  const date = document.getElementById('h-date').value;
-  const name = document.getElementById('h-name').value.trim();
-  const impactGarde = document.getElementById('h-impact-garde').checked;
+export async function addHoliday() {
+  const date = document.getElementById('h-date')?.value;
+  const name = document.getElementById('h-name')?.value?.trim();
   if (!date || !name) { window.toast('⚠ Complétez la date et la désignation'); return; }
   if (state.holidays.some(h => h.date === date)) { window.toast('⚠ Un événement existe déjà à cette date'); return; }
-  state.holidays.push({ date, name, impactGarde });
-  document.getElementById('h-date').value = '';
-  document.getElementById('h-name').value = '';
   
-  if (window.syncLeavesAndHolidaysIntoSchedule) {
-    window.syncLeavesAndHolidaysIntoSchedule();
+  try {
+    const saved = await api.createJourFerie({ date, libelle: name });
+    state.holidays.push({ id: saved.id, date: saved.date, name: saved.libelle, libelle: saved.libelle });
+    if (document.getElementById('h-date')) document.getElementById('h-date').value = '';
+    if (document.getElementById('h-name')) document.getElementById('h-name').value = '';
+    
+    if (window.syncLeavesAndHolidaysIntoSchedule) {
+      window.syncLeavesAndHolidaysIntoSchedule();
+    }
+    renderAll();
+    window.toast('✓ Jour férié enregistré en base');
+  } catch (err) {
+    window.toast(`🛑 ${err.message || "Erreur d'enregistrement"}`);
   }
-  renderAll();
-  window.toast('✓ Jour férié enregistré');
 }
 
-export function removeHoliday(date) {
-  state.holidays = state.holidays.filter(h => h.date !== date);
-  if (window.syncLeavesAndHolidaysIntoSchedule) {
-    window.syncLeavesAndHolidaysIntoSchedule();
+export async function removeHoliday(dateOrId) {
+  const item = state.holidays.find(h => h.date === dateOrId || String(h.id) === String(dateOrId));
+  if (!item) return;
+  try {
+    if (item.id) {
+      await api.deleteJourFerie(item.id);
+    }
+    state.holidays = state.holidays.filter(h => h !== item);
+    if (window.syncLeavesAndHolidaysIntoSchedule) {
+      window.syncLeavesAndHolidaysIntoSchedule();
+    }
+    renderAll();
+    window.toast('✕ Jour férié supprimé');
+  } catch (err) {
+    window.toast('🛑 Erreur de suppression du jour férié');
   }
-  renderAll();
-  window.toast('✕ Jour férié supprimé');
 }
 
 export function renderHolidaysTable() {
@@ -53,7 +77,7 @@ export function renderHolidaysTable() {
       const formattedDate = formatter.format(new Date(h.date + 'T00:00:00')).replace('.', '');
       const splitted = formattedDate.split(' ');
       const displayDate = `<span style="color:#0c7c8c; font-weight:700;">${splitted[0]} ${splitted[1]}. ${splitted[2]}</span>`;
-      return `<div class="holiday-list-item"><div class="date-lbl">${displayDate}</div><div class="name-lbl">${h.name}</div><button class="holiday-btn-delete" onclick="removeHoliday('${h.date}')">✕</button></div>`;
+      return `<div class="holiday-list-item"><div class="date-lbl">${displayDate}</div><div class="name-lbl">${h.libelle || h.name}</div><button class="holiday-btn-delete" onclick="removeHoliday('${h.id || h.date}')">✕</button></div>`;
     }).join('');
   }
   const countF = document.getElementById('count-feries');
@@ -101,19 +125,24 @@ export function syncCalendarWithInputDate(dateVal) {
   renderInteractiveCalendar();
 }
 
-export function toggleDayHoliday(dateStr) {
+export async function toggleDayHoliday(dateStr) {
   const hol = getHoliday(dateStr);
   if (hol) {
-    removeHoliday(dateStr);
+    await removeHoliday(hol.id || hol.date);
   } else {
     const defaultName = prompt("Entrez le libellé pour ce jour férié :", "Jour férié");
     if (defaultName !== null && defaultName.trim() !== "") {
-      state.holidays.push({ date: dateStr, name: defaultName.trim(), impactGarde: true });
-      if (window.syncLeavesAndHolidaysIntoSchedule) {
-        window.syncLeavesAndHolidaysIntoSchedule();
+      try {
+        const saved = await api.createJourFerie({ date: dateStr, libelle: defaultName.trim() });
+        state.holidays.push({ id: saved.id, date: saved.date, name: saved.libelle, libelle: saved.libelle });
+        if (window.syncLeavesAndHolidaysIntoSchedule) {
+          window.syncLeavesAndHolidaysIntoSchedule();
+        }
+        renderAll();
+        window.toast('✓ Jour férié ajouté');
+      } catch (err) {
+        window.toast(`🛑 ${err.message || "Erreur"}`);
       }
-      renderAll();
-      window.toast('✓ Jour férié ajouté');
     }
   }
 }

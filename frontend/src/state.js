@@ -33,7 +33,6 @@ export const TASK_LABELS = {
 export function getTaskClass(taskName) {
   if (!taskName) return 'task-cell repos';
   if (TASK_CLASSES[taskName]) return TASK_CLASSES[taskName];
-  // Normalisation rétrocompatible si ancien code
   if (taskName === 'SCAN_M' || taskName === 'SCAN_A') return 'task-cell scanner';
   if (taskName === 'IRM_M' || taskName === 'IRM_A') return 'task-cell irm';
   if (taskName === 'RAD_M' || taskName === 'RAD_A') return 'task-cell echo';
@@ -53,21 +52,12 @@ export function getTaskLabel(taskName) {
 
 export const state = {
   staff: [],
+  leavesList: [], // All conge records from SQLite
   leaves: { summer: {}, flex: [] },
   ui: { isHydrated: false },
-  holidays: [
-    { date: '2026-01-14', name: 'Révolution tunisienne', impactGarde: true },
-    { date: '2026-03-20', name: 'Fête de l\'Indépendance', impactGarde: true },
-    { date: '2026-05-01', name: 'Fête du Travail', impactGarde: true },
-    { date: '2026-07-25', name: 'Fête de la République', impactGarde: true },
-    { date: '2026-08-13', name: 'Fête de la Femme', impactGarde: true }
-  ],
-  rooms: [
-    { id: 'Scanner', name: 'Scanner', minSenior: 1, maxSenior: 3, minResident: 1, maxResident: 3, minInf: 0, maxInf: 2, minTech: 2, maxTech: 4, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
-    { id: 'IRM', name: 'IRM', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 3, minInf: 0, maxInf: 1, minTech: 1, maxTech: 3, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
-    { id: 'Radio', name: 'Échographie / Doppler', minSenior: 1, maxSenior: 2, minResident: 2, maxResident: 4, minInf: 1, maxInf: 2, minTech: 1, maxTech: 2, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
-    { id: 'Lecture', name: 'Salle de Lecture', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 2, minInf: 0, maxInf: 0, minTech: 0, maxTech: 1, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' }
-  ],
+  holidays: [], // Holidays loaded from SQLite
+  rooms: [], // Rooms loaded from SQLite
+  indisponibilitesList: [], // Indisponibilités from SQLite
   schedule: null,
   activeRestitTab: 'SENIOR',
   archives: {},
