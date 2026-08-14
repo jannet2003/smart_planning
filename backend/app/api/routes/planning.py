@@ -90,20 +90,18 @@ def _validate_senior_room_combinations(payload: dict, db: Session):
     for key, val in grid.items():
         if not val or val in ("REPOS", "CONGE", "FERIE", "GARDE"):
             continue
-        parts = key.split("_")
-        if len(parts) >= 2:
-            mat = parts[0]
-            date = "_".join(parts[1:])
+        parts = key.rsplit("_", 1)
+        if len(parts) == 2:
+            mat, date = parts[0], parts[1]
             if mat in seniors_mats:
                 agent_date_rooms.setdefault((mat, date), []).append(val)
 
     for key, val_list in additional.items():
         if not val_list:
             continue
-        parts = key.split("_")
-        if len(parts) >= 2:
-            mat = parts[0]
-            date = "_".join(parts[1:])
+        parts = key.rsplit("_", 1)
+        if len(parts) == 2:
+            mat, date = parts[0], parts[1]
             if mat in seniors_mats:
                 for v in val_list:
                     if v and v not in ("REPOS", "CONGE", "FERIE", "GARDE"):
