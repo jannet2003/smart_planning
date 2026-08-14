@@ -2,13 +2,15 @@
 .venv/
 
 # Fichiers compilés Python
-__pycache__/
+**/__pycache__/
 *.py[cod]
 *.pyo
 *.pyc
 
 # Base de données locale (ne pas versionner les données)
 backend/planning.db
+data/*.db
+data/planning.db
 
 # Dossier généré par le sous-module / clone interne
 radiologie-planning/

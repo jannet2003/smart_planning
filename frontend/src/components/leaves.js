@@ -1,7 +1,12 @@
 import { state, renderAll } from '../state.js';
 import { dateAdd, rangeLen, inRange } from '../utils/helpers.js';
+import { populateStaffSelects } from './staff.js';
 
 export function initLeaves() {
+  window.openFlexLeaveModal = openFlexLeaveModal;
+  window.closeFlexLeaveModal = closeFlexLeaveModal;
+  window.openSummerBlockModal = openSummerBlockModal;
+  window.closeSummerBlockModal = closeSummerBlockModal;
   window.checkLimitAlert = checkLimitAlert;
   window.addFlexLeave = addFlexLeave;
   window.assignSummerBlock = assignSummerBlock;
@@ -11,6 +16,46 @@ export function initLeaves() {
   window.totalLeaveDays = totalLeaveDays;
   window.totalFlexLeaveDays = totalFlexLeaveDays;
   window.isOnLeave = isOnLeave;
+}
+
+// Attachement immédiat sur window au chargement du module
+window.openFlexLeaveModal = openFlexLeaveModal;
+window.closeFlexLeaveModal = closeFlexLeaveModal;
+window.openSummerBlockModal = openSummerBlockModal;
+window.closeSummerBlockModal = closeSummerBlockModal;
+
+export function openFlexLeaveModal() {
+  populateStaffSelects();
+  const modal = document.getElementById('flex-leave-modal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+}
+
+export function closeFlexLeaveModal() {
+  const modal = document.getElementById('flex-leave-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+
+export function openSummerBlockModal() {
+  populateStaffSelects();
+  const modal = document.getElementById('summer-block-modal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+}
+
+export function closeSummerBlockModal() {
+  const modal = document.getElementById('summer-block-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 }
 
 export function totalLeaveDays(staffId) {
@@ -66,6 +111,7 @@ export function addFlexLeave() {
   if (window.syncLeavesAndHolidaysIntoSchedule) {
     window.syncLeavesAndHolidaysIntoSchedule();
   }
+  closeFlexLeaveModal();
   renderAll();
   window.toast('✓ Période de congé validée');
 }
@@ -77,7 +123,9 @@ export function assignSummerBlock() {
   if (window.syncLeavesAndHolidaysIntoSchedule) {
     window.syncLeavesAndHolidaysIntoSchedule();
   }
+  closeSummerBlockModal();
   renderAll();
+  window.toast('✓ Bloc de 30 jours attribué');
 }
 
 export function openModal(matricule) {
@@ -95,11 +143,19 @@ export function openModal(matricule) {
     listItems.push(`<div class="history-item"><div class="dates"><span>✈️ Congé Flexible (${rangeLen(l.start, l.end)}j)</span><span>Du ${l.start} au ${l.end}</span></div>${l.reason && l.reason !== 'Sans objet' ? `<div class="reason"><b>Motif :</b> ${l.reason}</div>` : ''}</div>`);
   });
   hList.innerHTML = listItems.length === 0 ? `<p style="font-size:12px; color:var(--text-faint); text-align:center;">Aucun congé enregistré.</p>` : listItems.join('');
-  document.getElementById('history-modal')?.classList.add('active');
+  const modal = document.getElementById('history-modal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
 }
 
 export function closeModal() {
-  document.getElementById('history-modal')?.classList.remove('active');
+  const modal = document.getElementById('history-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
 }
 
 export function renderLeaveTable() {

@@ -26,18 +26,15 @@ client = TestClient(app)
 
 def test_create_and_get_personnel():
     payload = {
-        "nom": "Durand",
-        "prenom": "Alice",
+        "nom": "Alice Durand",
         "role": "SENIOR",
-        "quotite_horaire": 40,
         "statut": "actif",
-        "matricule": "SR-999",
     }
 
     response = client.post("/api/personnel/", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["matricule"] == "SR-999"
+    assert data["nom"] == "Alice Durand"
 
     get_response = client.get("/api/personnel/")
     assert get_response.status_code == 200
@@ -47,15 +44,13 @@ def test_create_and_get_personnel():
 def test_create_and_get_salle():
     payload = {
         "nom": "Scanner A",
-        "type_salle": "Scanner",
-        "code": "SCAN_A",
         "actif": True,
     }
 
     response = client.post("/api/salles/", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["code"] == "SCAN_A"
+    assert data["nom"] == "Scanner A"
 
     get_response = client.get("/api/salles/")
     assert get_response.status_code == 200
@@ -65,9 +60,9 @@ def test_create_and_get_salle():
 def test_create_and_get_planning():
     payload = {
         "semaine_code": "2026-W31",
-        "snapshot_personnel": [{"matricule": "SR-001", "nom": "Test"}],
-        "snapshot_salles": [{"code": "SCAN_A", "nom": "Scanner A"}],
-        "affectations": [{"matricule": "SR-001", "salle": "SCAN_A"}],
+        "snapshot_personnel": [{"nom": "Test"}],
+        "snapshot_salles": [{"nom": "Scanner A"}],
+        "affectations": [{"personnel": "Test", "salle": "Scanner A"}],
     }
 
     response = client.post("/api/planning/", json=payload)
@@ -92,13 +87,10 @@ def test_update_personnel_status():
     create_response = client.post(
         "/api/personnel/",
         json={
-            "nom": "Durand",
-            "prenom": "Alice",
+            "nom": "Alice Durand",
             "role": "SENIOR",
-            "quotite_horaire": 40,
             "statut": "actif",
             "actif": True,
-            "matricule": "SR-998",
         },
     )
     assert create_response.status_code == 200

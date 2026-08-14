@@ -1,11 +1,20 @@
+function formatIsoDate(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function dateAdd(dateStr, days) {
-  const d = new Date(dateStr + 'T00:00:00');
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
   d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+  return formatIsoDate(d);
 }
 
 export function fmtShort(dateStr) {
-  const d = new Date(dateStr + 'T00:00:00');
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 

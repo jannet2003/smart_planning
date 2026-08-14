@@ -1,8 +1,17 @@
-import { state, CATS, TASK_CLASSES, TASK_LABELS, renderAll } from '../state.js';
+import { state, CATS, TASK_CLASSES, TASK_LABELS, getTaskClass, getTaskLabel, renderAll } from '../state.js';
 import { dateAdd, fmtShort, dayName, rangeLen, inRange } from '../utils/helpers.js';
 import { getHoliday } from './calendar.js';
 import { isOnLeave, totalLeaveDays, totalFlexLeaveDays } from './leaves.js';
 import * as api from '../api/api.js';
+
+export function normalizeTask(task) {
+  if (!task) return 'REPOS';
+  if (task === 'SCAN_M' || task === 'SCAN_A') return 'Scanner';
+  if (task === 'IRM_M' || task === 'IRM_A') return 'IRM';
+  if (task === 'RAD_M' || task === 'RAD_A') return 'Échographie / Doppler';
+  if (task === 'LECT_M' || task === 'LECT_A') return 'Salle de Lecture';
+  return task;
+}
 
 export function initPlanning() {
   window.syncLeavesAndHolidaysIntoSchedule = syncLeavesAndHolidaysIntoSchedule;
@@ -68,16 +77,27 @@ export async function saveCurrentWeek() {
   const nameVal = document.getElementById('week-name').value.trim();
   const key = `${startVal}_${Date.now()}`;
   
+  const frozenStaff = JSON.parse(JSON.stringify(state.staff));
+  const frozenRooms = JSON.parse(JSON.stringify(state.rooms));
+  const frozenSchedule = JSON.parse(JSON.stringify(state.schedule));
+
   const scheduleData = {
     semaine_code: startVal,
-    snapshot_personnel: state.staff,
-    snapshot_salles: state.rooms,
-    affectations: state.schedule
+    snapshot_personnel: frozenStaff,
+    snapshot_salles: frozenRooms,
+    affectations: frozenSchedule
   };
 
   try {
-    await api.savePlanning(scheduleData);
-    state.archives[key] = { name: nameVal, start: startVal, schedule: JSON.parse(JSON.stringify(state.schedule)) };
+    const saved = await api.savePlanning(scheduleData);
+    const archKey = `${startVal}_DB_${saved ? saved.id : Date.now()}`;
+    state.archives[archKey] = {
+      name: nameVal || `Semaine du ${startVal} (Sauvegardé)`,
+      start: startVal,
+      schedule: frozenSchedule,
+      snapshotPersonnel: frozenStaff,
+      snapshotSalles: frozenRooms
+    };
     updateArchivesDropdown();
     window.toast('💾 Semaine sauvegardée dans la base de données !');
   } catch (err) {
@@ -85,6 +105,7 @@ export async function saveCurrentWeek() {
     window.toast('🛑 Erreur lors de la sauvegarde du planning');
   }
 }
+
 
 export function updateArchivesDropdown() {
   const select = document.getElementById('opt-week-select-tab5');
@@ -277,10 +298,10 @@ export function runOptimization() {
     activeStaff.forEach(agent => {
       if (busyToday.has(agent.matricule)) return;
       const key = `${agent.matricule}_${date}`;
-      const allowed = agent.allowedRooms;
-      if (allowed.includes('Scanner') && Math.random() > 0.6) gridAssignments[key] = 'SCAN_M';
-      else if (allowed.includes('IRM') && Math.random() > 0.6) gridAssignments[key] = 'IRM_M';
-      else if (allowed.includes('Radio') && Math.random() > 0.5) gridAssignments[key] = 'RAD_M';
+      const allowed = agent.allowedRooms || [];
+      if (allowed.includes('Scanner') && Math.random() > 0.6) gridAssignments[key] = 'Scanner';
+      else if (allowed.includes('IRM') && Math.random() > 0.6) gridAssignments[key] = 'IRM';
+      else if ((allowed.includes('Radio') || allowed.includes('Échographie / Doppler')) && Math.random() > 0.5) gridAssignments[key] = 'Échographie / Doppler';
       else gridAssignments[key] = 'REPOS';
     });
   });
@@ -371,33 +392,68 @@ export function handleDrop(ev, mat, date) {
 }
 
 export function canCombineSeniorRooms(firstCode, secondCode) {
-  const first = state.rooms.find(r => r.code === firstCode);
-  const second = state.rooms.find(r => r.code === secondCode);
-  if (!first || !second || firstCode === secondCode) return false;
+  const norm1 = normalizeTask(firstCode);
+  const norm2 = normalizeTask(secondCode);
+  const first = state.rooms.find(r => r.name === norm1 || String(r.id) === String(norm1));
+  const second = state.rooms.find(r => r.name === norm2 || String(r.id) === String(norm2));
+  if (!first || !second || norm1 === norm2) return false;
   const mode1 = first.seniorMode || 'EXCLUSIVE';
   const mode2 = second.seniorMode || 'EXCLUSIVE';
   if (mode1 === 'EXCLUSIVE' || mode2 === 'EXCLUSIVE') return false;
-  const permits = (room, other) => room.seniorMode === 'COMBINABLE' || (room.seniorMode === 'SELECTIVE' && room.seniorCompatibleRooms?.includes(other.id));
+  const permits = (room, other) => room.seniorMode === 'COMBINABLE' || (room.seniorMode === 'SELECTIVE' && (room.seniorCompatibleRooms?.includes(String(other.id)) || room.seniorCompatibleRooms?.includes(other.name)));
   return permits(first, second) && permits(second, first);
 }
 
-export function assignStaffToRoomSlot(mat, roomCode, date) {
+export function canCombineSeniorRoomsWithReason(firstCode, secondCode) {
+  const norm1 = normalizeTask(firstCode);
+  const norm2 = normalizeTask(secondCode);
+  const first = state.rooms.find(r => r.name === norm1 || String(r.id) === String(norm1));
+  const second = state.rooms.find(r => r.name === norm2 || String(r.id) === String(norm2));
+  if (!first || !second || norm1 === norm2) return { ok: false, msg: `Affectation impossible : salles non reconnues (${norm1} / ${norm2}).` };
+  const mode1 = first.seniorMode || 'EXCLUSIVE';
+  const mode2 = second.seniorMode || 'EXCLUSIVE';
+  if (mode1 === 'EXCLUSIVE') return { ok: false, msg: `Affectation impossible : ${first.name} est une salle exclusive. Ce senior ne peut pas être affecté à une autre salle dans le même poste.` };
+  if (mode2 === 'EXCLUSIVE') return { ok: false, msg: `Affectation impossible : ${second.name} est une salle exclusive. Ce senior ne peut pas être affecté à une autre salle dans le même poste.` };
+  const permits = (room, other) => {
+    if (room.seniorMode === 'COMBINABLE') return true;
+    if (room.seniorMode === 'SELECTIVE') {
+      const compat = room.seniorCompatibleRooms || [];
+      return compat.includes(String(other.id)) || compat.includes(other.name);
+    }
+    return false;
+  };
+  if (!permits(first, second)) return { ok: false, msg: `Affectation impossible : Cette salle (${first.name}) ne peut pas être combinée avec ${second.name} selon sa configuration.` };
+  if (!permits(second, first)) return { ok: false, msg: `Affectation impossible : Cette salle (${second.name}) ne peut pas être combinée avec ${first.name} selon sa configuration.` };
+  return { ok: true, msg: null };
+}
+
+export function assignStaffToRoomSlot(mat, roomName, date) {
   if (!state.schedule) return;
-  const oldVal = state.schedule.gridAssignments[`${mat}_${date}`];
+  const targetRoom = normalizeTask(roomName);
+  const oldVal = normalizeTask(state.schedule.gridAssignments[`${mat}_${date}`]);
   const agent = state.staff.find(s => s.matricule === mat);
   const key = `${mat}_${date}`;
   state.schedule.additionalSeniorAssignments ||= {};
   const extraRooms = state.schedule.additionalSeniorAssignments[key] ||= [];
-  if (agent?.cat === 'SENIOR' && extraRooms.includes(roomCode)) {
-    state.schedule.additionalSeniorAssignments[key] = extraRooms.filter(code => code !== roomCode);
-  } else if (agent?.cat === 'SENIOR' && oldVal && !['REPOS', 'CONGE', 'FERIE'].includes(oldVal) && oldVal !== roomCode) {
-    if (!canCombineSeniorRooms(oldVal, roomCode)) {
-      window.toast('⚠ Ces deux salles ne sont pas combinables pour un senior.');
+  if (agent?.cat === 'SENIOR' && extraRooms.includes(targetRoom)) {
+    state.schedule.additionalSeniorAssignments[key] = extraRooms.filter(r => r !== targetRoom);
+  } else if (agent?.cat === 'SENIOR' && oldVal && !['REPOS', 'CONGE', 'FERIE'].includes(oldVal) && oldVal !== targetRoom) {
+    const check = canCombineSeniorRoomsWithReason(oldVal, targetRoom);
+    if (!check.ok) {
+      window.toast(`⚠ ${check.msg}`);
       return;
     }
-    state.schedule.additionalSeniorAssignments[key].push(roomCode);
+    // Also check against each already-extra room
+    for (const extra of extraRooms) {
+      const checkExtra = canCombineSeniorRoomsWithReason(extra, targetRoom);
+      if (!checkExtra.ok) {
+        window.toast(`⚠ ${checkExtra.msg}`);
+        return;
+      }
+    }
+    state.schedule.additionalSeniorAssignments[key].push(targetRoom);
   } else {
-    state.schedule.gridAssignments[key] = (oldVal === roomCode) ? 'REPOS' : roomCode;
+    state.schedule.gridAssignments[key] = (oldVal === targetRoom) ? 'REPOS' : targetRoom;
   }
   renderRestitution();
 }
@@ -408,29 +464,29 @@ export function renderRoomsView(target, dates) {
   dates.forEach(d => html += `<th style="text-align:center">${dayName(d)}<br><small style="font-weight:normal">${fmtShort(d)}</small></th>`);
   html += `</tr></thead><tbody>`;
   state.rooms.forEach(room => {
-    html += `<tr><td style="vertical-align:top; background:var(--panel-2);"><div style="font-weight:700; font-size:13px; color:var(--accent-blue-dark);">${room.name}</div><div style="font-size:10px; color:var(--text-faint);">Code: ${room.code}</div></td>`;
+    html += `<tr><td style="vertical-align:top; background:var(--panel-2);"><div style="font-weight:700; font-size:14px; color:var(--accent-blue-dark);">${room.name}</div></td>`;
     dates.forEach(d => {
       const isBroken = room.isBroken && inRange(d, room.brokenStart, room.brokenEnd);
       if (isBroken) {
         html += `<td style="background:var(--red-dim); text-align:center; vertical-align:middle;"><span style="color:var(--red); font-weight:bold; font-size:11px;">⚠️ EN PANNE / MAINTENANCE</span></td>`;
       } else {
-        const assigned = activeStaff.filter(s => state.schedule.gridAssignments[`${s.matricule}_${d}`] === room.code);
+        const assigned = activeStaff.filter(s => normalizeTask(state.schedule.gridAssignments[`${s.matricule}_${d}`]) === room.name);
         html += `<td style="vertical-align:top; background:#fff; padding:6px;"><div class="room-people-list">`;
         ['SENIOR', 'RESIDENT', 'TECH', 'INF'].forEach(catKey => {
           const catAssigned = assigned.filter(s => catKey === 'RESIDENT' ? s.cat.startsWith('RESIDENT') : s.cat === catKey);
           if (catAssigned.length > 0 || state.isEditing) {
             html += `<div class="role-group-container"><div class="role-group-title">${catKey}</div>`;
             catAssigned.forEach(a => {
-              html += `<div class="staff-slot-row"><span style="font-size:11px; flex-grow:1; font-weight:600;">${a.name}</span>${state.isEditing ? `<button class="room-btn-clear" onclick="assignStaffToRoomSlot('${a.matricule}', '${room.code}', '${d}')">✕</button>` : ''}</div>`;
+              html += `<div class="staff-slot-row"><span style="font-size:11px; flex-grow:1; font-weight:600;">${a.name}</span>${state.isEditing ? `<button class="room-btn-clear" onclick="assignStaffToRoomSlot('${a.matricule}', '${room.name}', '${d}')">✕</button>` : ''}</div>`;
             });
             if (state.isEditing) {
               const available = activeStaff.filter(s => {
                 const isMatchingCat = catKey === 'RESIDENT' ? s.cat.startsWith('RESIDENT') : s.cat === catKey;
-                const currentTask = state.schedule.gridAssignments[`${s.matricule}_${d}`];
-                return isMatchingCat && currentTask !== room.code && currentTask !== 'CONGE' && currentTask !== 'FERIE';
+                const currentTask = normalizeTask(state.schedule.gridAssignments[`${s.matricule}_${d}`]);
+                return isMatchingCat && currentTask !== room.name && currentTask !== 'CONGE' && currentTask !== 'FERIE';
               });
               if (available.length > 0) {
-                html += `<div class="staff-slot-row" style="margin-top:2px;"><select class="room-person-select" onchange="if(this.value) assignStaffToRoomSlot(this.value, '${room.code}', '${d}')"><option value="">+ Ajouter...</option>${available.map(a => `<option value="${a.matricule}">${a.name}</option>`).join('')}</select></div>`;
+                html += `<div class="staff-slot-row" style="margin-top:2px;"><select class="room-person-select" onchange="if(this.value) assignStaffToRoomSlot(this.value, '${room.name}', '${d}')"><option value="">+ Ajouter...</option>${available.map(a => `<option value="${a.matricule}">${a.name}</option>`).join('')}</select></div>`;
               }
             }
             html += `</div>`;
@@ -470,11 +526,12 @@ export function renderRestitution() {
   filteredStaff.forEach(s => {
     html += `<tr><td style="font-weight:600;">${s.name} <br><span class="badge ${s.cat}">${CATS[s.cat] ? CATS[s.cat].short : s.cat}</span></td>`;
     dates.forEach(d => {
-      const taskCode = state.schedule.gridAssignments[`${s.matricule}_${d}`] || 'REPOS';
+      const rawTask = state.schedule.gridAssignments[`${s.matricule}_${d}`] || 'REPOS';
+      const taskCode = normalizeTask(rawTask);
       const nightTask = state.schedule.nightAssignments?.[`${s.matricule}_${d}`];
-      const cellClass = TASK_CLASSES[taskCode] || 'task-cell repos';
-      const label = TASK_LABELS[taskCode] || taskCode;
-      html += `<td style="padding:4px;"><div class="slot-container" ${state.isEditing ? `ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${s.matricule}', '${d}')"` : ''}><div class="${cellClass}">${label}</div>${nightTask ? `<div class="${TASK_CLASSES[nightTask] || 'task-cell garde'} night-duty">🌙 ${TASK_LABELS[nightTask] || nightTask}</div>` : ''}</div></td>`;
+      const cellClass = getTaskClass(taskCode);
+      const label = getTaskLabel(taskCode);
+      html += `<td style="padding:4px;"><div class="slot-container" ${state.isEditing ? `ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${s.matricule}', '${d}')"` : ''}><div class="${cellClass}">${label}</div>${nightTask ? `<div class="${getTaskClass(nightTask) || 'task-cell garde'} night-duty">🌙 ${getTaskLabel(nightTask) || nightTask}</div>` : ''}</div></td>`;
     });
     html += `</tr>`;
   });
@@ -490,11 +547,12 @@ export function checkRulesAndConflicts() {
   dates.forEach((date, idx) => {
     activeStaff.forEach(agent => {
       const key = `${agent.matricule}_${date}`;
-      const task = state.schedule.gridAssignments[key];
-      if (isOnLeave(agent.matricule, date) && task !== 'CONGE') {
-        conflicts.push(`<b>${agent.name}</b> est planifié (${TASK_LABELS[task] || task}) le <b>${date}</b> pendant son congé.`);
+      const rawTask = state.schedule.gridAssignments[key];
+      const normTask = normalizeTask(rawTask);
+      if (isOnLeave(agent.matricule, date) && normTask !== 'CONGE') {
+        conflicts.push(`<b>${agent.name}</b> est planifié (${getTaskLabel(normTask)}) le <b>${date}</b> pendant son congé.`);
       }
-      const isBrokenDay = state.rooms.some(r => r.code === task && r.isBroken && inRange(date, r.brokenStart, r.brokenEnd));
+      const isBrokenDay = state.rooms.some(r => (r.name === normTask || String(r.id) === normTask) && r.isBroken && inRange(date, r.brokenStart, r.brokenEnd));
       if (isBrokenDay) {
         conflicts.push(`<b>${agent.name}</b> est affecté à une machine en panne le <b>${date}</b>.`);
       }

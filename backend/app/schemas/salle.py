@@ -4,8 +4,6 @@ from typing import Optional
 
 class SalleBase(BaseModel):
     nom: str
-    type_salle: str
-    code: Optional[str] = None
     actif: bool = True
 
     min_senior: int = 1

@@ -7,22 +7,49 @@ export const CATS = {
 };
 
 export const TASK_CLASSES = {
-  'SCAN_M': 'task-cell scanner', 'SCAN_A': 'task-cell scanner',
-  'IRM_M': 'task-cell irm', 'IRM_A': 'task-cell irm',
-  'RAD_M': 'task-cell echo', 'RAD_A': 'task-cell echo',
-  'LECT_M': 'task-cell lecture', 'LECT_A': 'task-cell lecture',
-  'GARDE': 'task-cell garde', 'REPOS': 'task-cell repos', 'CONGE': 'task-cell conge',
+  'Scanner': 'task-cell scanner',
+  'IRM': 'task-cell irm',
+  'Échographie / Doppler': 'task-cell echo',
+  'Radio': 'task-cell echo',
+  'Salle de Lecture': 'task-cell lecture',
+  'GARDE': 'task-cell garde',
+  'REPOS': 'task-cell repos',
+  'CONGE': 'task-cell conge',
   'FERIE': 'task-cell ferie'
 };
 
 export const TASK_LABELS = {
-  'SCAN_M': 'Scanner', 'SCAN_A': 'Scanner',
-  'IRM_M': 'IRM', 'IRM_A': 'IRM',
-  'RAD_M': 'Écho / Doppler', 'RAD_A': 'Écho / Doppler',
-  'LECT_M': 'Salle de lecture', 'LECT_A': 'Salle de lecture',
-  'GARDE': 'Garde', 'REPOS': 'Repos', 'CONGE': 'Congé',
+  'Scanner': 'Scanner',
+  'IRM': 'IRM',
+  'Échographie / Doppler': 'Écho / Doppler',
+  'Radio': 'Écho / Doppler',
+  'Salle de Lecture': 'Salle de lecture',
+  'GARDE': 'Garde',
+  'REPOS': 'Repos',
+  'CONGE': 'Congé',
   'FERIE': 'Férié'
 };
+
+export function getTaskClass(taskName) {
+  if (!taskName) return 'task-cell repos';
+  if (TASK_CLASSES[taskName]) return TASK_CLASSES[taskName];
+  // Normalisation rétrocompatible si ancien code
+  if (taskName === 'SCAN_M' || taskName === 'SCAN_A') return 'task-cell scanner';
+  if (taskName === 'IRM_M' || taskName === 'IRM_A') return 'task-cell irm';
+  if (taskName === 'RAD_M' || taskName === 'RAD_A') return 'task-cell echo';
+  if (taskName === 'LECT_M' || taskName === 'LECT_A') return 'task-cell lecture';
+  return 'task-cell scanner';
+}
+
+export function getTaskLabel(taskName) {
+  if (!taskName) return '';
+  if (TASK_LABELS[taskName]) return TASK_LABELS[taskName];
+  if (taskName === 'SCAN_M' || taskName === 'SCAN_A') return 'Scanner';
+  if (taskName === 'IRM_M' || taskName === 'IRM_A') return 'IRM';
+  if (taskName === 'RAD_M' || taskName === 'RAD_A') return 'Écho / Doppler';
+  if (taskName === 'LECT_M' || taskName === 'LECT_A') return 'Salle de lecture';
+  return taskName;
+}
 
 export const state = {
   staff: [],
@@ -36,10 +63,10 @@ export const state = {
     { date: '2026-08-13', name: 'Fête de la Femme', impactGarde: true }
   ],
   rooms: [
-    { id: 'Scanner', name: 'Scanner', minSenior: 1, maxSenior: 3, minResident: 1, maxResident: 3, minInf: 0, maxInf: 2, minTech: 2, maxTech: 4, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'SCAN_M' },
-    { id: 'IRM', name: 'IRM', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 3, minInf: 0, maxInf: 1, minTech: 1, maxTech: 3, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'IRM_M' },
-    { id: 'Radio', name: 'Échographie / Doppler', minSenior: 1, maxSenior: 2, minResident: 2, maxResident: 4, minInf: 1, maxInf: 2, minTech: 1, maxTech: 2, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'RAD_M' },
-    { id: 'Lecture', name: 'Salle de Lecture', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 2, minInf: 0, maxInf: 0, minTech: 0, maxTech: 1, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '', code: 'LECT_M' }
+    { id: 'Scanner', name: 'Scanner', minSenior: 1, maxSenior: 3, minResident: 1, maxResident: 3, minInf: 0, maxInf: 2, minTech: 2, maxTech: 4, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
+    { id: 'IRM', name: 'IRM', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 3, minInf: 0, maxInf: 1, minTech: 1, maxTech: 3, seniorMode: 'EXCLUSIVE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
+    { id: 'Radio', name: 'Échographie / Doppler', minSenior: 1, maxSenior: 2, minResident: 2, maxResident: 4, minInf: 1, maxInf: 2, minTech: 1, maxTech: 2, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' },
+    { id: 'Lecture', name: 'Salle de Lecture', minSenior: 1, maxSenior: 2, minResident: 1, maxResident: 2, minInf: 0, maxInf: 0, minTech: 0, maxTech: 1, seniorMode: 'COMBINABLE', seniorCompatibleRooms: [], isBroken: false, brokenStart: '', brokenEnd: '', brokenReason: '' }
   ],
   schedule: null,
   activeRestitTab: 'SENIOR',
@@ -49,9 +76,9 @@ export const state = {
   weeklyRoomAvailability: {},
   externalDuty: {
     weekStart: null,
-    SENIOR: { manualOpen: false, customTags: [], records: {}, dayRecords: {} },
-    RESIDENT: { manualOpen: false, customTags: [], records: {}, dayRecords: {} },
-    TECH: { manualOpen: false, customTags: [], records: {}, dayRecords: {} }
+    SENIOR: { manualOpen: false, customTags: [], records: {}, dayRecords: {}, autoRestDays: {} },
+    RESIDENT: { manualOpen: false, customTags: [], records: {}, dayRecords: {}, autoRestDays: {} },
+    TECH: { manualOpen: false, customTags: [], records: {}, dayRecords: {}, autoRestDays: {} }
   }
 };
 

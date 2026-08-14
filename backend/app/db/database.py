@@ -29,7 +29,19 @@ engine = create_engine(
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+from sqlalchemy import text
+
 Base = declarative_base()
+
+
+def init_db():
+    Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        try:
+            conn.execute(text("ALTER TABLE personnel ADD COLUMN matricule VARCHAR;"))
+            conn.commit()
+        except Exception:
+            pass
 
 
 def get_db():

@@ -5,9 +5,9 @@ from pathlib import Path
 import os
 
 # Création des tables de base de données
-from app.db.database import engine, Base
+from app.db.database import engine, Base, init_db
 import app.models
-Base.metadata.create_all(bind=engine)
+init_db()
 
 from app.api.api import api_router
 

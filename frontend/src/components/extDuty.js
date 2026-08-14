@@ -30,7 +30,8 @@ export function initExtDuty() {
   window.setExtDutyCellV2 = setExtDutyCellV2;
   window.updateShiftValV2 = updateShiftValV2;
   window.renderExtDutyTab = renderExtDutyTab;
-  
+  window.changeExtDutyWeek = changeExtDutyWeek;
+
   initExtDutyDates();
 }
 
@@ -72,6 +73,94 @@ export function openAddTagModal() {
 
 export function closeAddTagModal() {
   document.getElementById('add-tag-modal')?.classList.remove('active');
+}
+
+function parseDate(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function formatDate(dateStr, options = { day: '2-digit', month: '2-digit', year: 'numeric' }) {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', options);
+}
+
+function fmtLong(dateStr) {
+  return formatDate(dateStr, { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function formatDateRange(start, end) {
+  return `${fmtLong(start)} — ${fmtLong(end)}`;
+}
+
+function formatIsoDate(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getNextSunday(dateStr) {
+  const date = parseDate(dateStr);
+  const day = date.getDay();
+  const offset = day === 0 ? 0 : 7 - day;
+  const result = new Date(date);
+  result.setDate(result.getDate() + offset);
+  return formatIsoDate(result);
+}
+
+function getExtDutyWeeks(startDate, endDate) {
+  const start = parseDate(startDate);
+  const end = parseDate(endDate);
+  if (start > end) return [];
+
+  const weeks = [];
+  let weekStart = new Date(start);
+  let isFirstWeek = true;
+
+  while (weekStart <= end) {
+    let weekEnd = new Date(weekStart);
+    if (isFirstWeek) {
+      const offset = weekStart.getDay() === 0 ? 0 : 7 - weekStart.getDay();
+      weekEnd.setDate(weekEnd.getDate() + offset);
+    } else {
+      weekEnd.setDate(weekEnd.getDate() + 6);
+    }
+    if (weekEnd > end) {
+      weekEnd = new Date(end);
+    }
+
+    const dates = [];
+    const d = new Date(weekStart);
+    while (d <= weekEnd) {
+      dates.push(formatIsoDate(d));
+      d.setDate(d.getDate() + 1);
+    }
+
+    weeks.push({ start: dates[0], end: dates[dates.length - 1], dates });
+    weekStart = new Date(weekEnd);
+    weekStart.setDate(weekStart.getDate() + 1);
+    isFirstWeek = false;
+  }
+
+  return weeks;
+}
+
+function resetExtDutyPeriodIfNeeded(startVal, endVal) {
+  if (state.externalDuty.periodStart !== startVal || state.externalDuty.periodEnd !== endVal || !Array.isArray(state.externalDuty.weeks) || state.externalDuty.weeks.length === 0) {
+    state.externalDuty.periodStart = startVal;
+    state.externalDuty.periodEnd = endVal;
+    state.externalDuty.weeks = getExtDutyWeeks(startVal, endVal);
+    state.externalDuty.currentWeekIndex = 0;
+  }
+}
+
+export function changeExtDutyWeek(direction) {
+  const weeks = state.externalDuty.weeks || [];
+  if (!weeks.length) return;
+  const nextIndex = (state.externalDuty.currentWeekIndex || 0) + direction;
+  if (nextIndex < 0 || nextIndex >= weeks.length) return;
+  state.externalDuty.currentWeekIndex = nextIndex;
+  renderExtDutyTab();
 }
 
 export function saveCustomExtDutyTag() {
@@ -152,16 +241,19 @@ export function handleExtDutyFileSelected(event) {
       const json = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
       let count = 0;
       const startVal = document.getElementById('startDateExt').value;
+      const endVal = document.getElementById('endDateExt').value;
+      resetExtDutyPeriodIfNeeded(startVal, endVal);
+      const periodDates = state.externalDuty.weeks.flatMap(w => w.dates);
       const activeStaff = state.staff.filter(s => catKey === 'RESIDENT' ? s.cat.startsWith('RESIDENT') : s.cat === catKey);
       json.forEach((row, rowIdx) => {
         if (rowIdx === 0 || !row[0]) return;
         const nameOrId = String(row[0]).trim().toLowerCase();
         const agent = activeStaff.find(s => s.name.toLowerCase().includes(nameOrId) || s.matricule.toLowerCase() === nameOrId);
         if (agent) {
-          for (let d = 0; d < 7; d++) {
+          for (let d = 0; d < periodDates.length; d++) {
             const cellVal = row[d + 1];
             if (cellVal) {
-              const date = dateAdd(startVal, d);
+              const date = periodDates[d];
               const tagStr = String(cellVal).trim().toUpperCase();
               let tagId = 'GARDE';
               if (tagStr.includes('POSTE')) tagId = 'POSTE_GARDE';
@@ -175,6 +267,7 @@ export function handleExtDutyFileSelected(event) {
       window.toast(`✅ Import réussi : ${count} affectation(s).`);
       renderExtDutyTab();
     } catch (err) {
+      console.error(err);
       window.toast(`❌ Erreur lors de l'import.`);
     }
   };
@@ -195,25 +288,40 @@ export function setExtDutyCellV2(catKey, mat, date, tagId, silent = false) {
   if (!state.schedule) {
     state.schedule = { gridAssignments: {}, nightAssignments: {}, datesList: [] };
   }
+  state.schedule.gridAssignments ||= {};
+  state.schedule.nightAssignments ||= {};
+  state.externalDuty[catKey].autoRestDays ||= {};
+
   if (!tagId) {
     const oldTag = state.externalDuty[catKey].records[key];
     delete state.externalDuty[catKey].records[key];
     if (state.schedule.nightAssignments) delete state.schedule.nightAssignments[key];
+
     if (getsPostGuardRest && oldTag === 'GARDE') {
       if (state.externalDuty[catKey].records[nextKey] === 'REPOS_POST_GARDE') {
         delete state.externalDuty[catKey].records[nextKey];
       }
-      if (state.schedule.gridAssignments[key] === 'REPOS') delete state.schedule.gridAssignments[key];
-      if (state.schedule.gridAssignments[nextKey] === 'REPOS') delete state.schedule.gridAssignments[nextKey];
+      if (state.externalDuty[catKey].autoRestDays[key] && state.schedule.gridAssignments[key] === 'REPOS') {
+        delete state.schedule.gridAssignments[key];
+        delete state.externalDuty[catKey].autoRestDays[key];
+      }
+      if (state.externalDuty[catKey].autoRestDays[nextKey] && state.schedule.gridAssignments[nextKey] === 'REPOS') {
+        delete state.schedule.gridAssignments[nextKey];
+        delete state.externalDuty[catKey].autoRestDays[nextKey];
+      }
     }
   } else {
     state.externalDuty[catKey].records[key] = tagId;
     if (tagId === 'GARDE' && getsPostGuardRest) {
       state.externalDuty[catKey].records[nextKey] = 'REPOS_POST_GARDE';
-      state.schedule.gridAssignments ||= {};
-      state.schedule.nightAssignments ||= {};
-      state.schedule.gridAssignments[key] = 'REPOS';
-      state.schedule.gridAssignments[nextKey] = 'REPOS';
+      if (!state.schedule.gridAssignments[key]) {
+        state.schedule.gridAssignments[key] = 'REPOS';
+        state.externalDuty[catKey].autoRestDays[key] = 'REPOS_POST_GARDE';
+      }
+      if (!state.schedule.gridAssignments[nextKey]) {
+        state.schedule.gridAssignments[nextKey] = 'REPOS';
+        state.externalDuty[catKey].autoRestDays[nextKey] = 'REPOS_POST_GARDE';
+      }
       state.schedule.nightAssignments[key] = 'GARDE';
       if (!silent) window.toast('✅ Garde affectée : Repos auto J (jour) et J+1 (jour & nuit).');
     }
@@ -231,24 +339,47 @@ export function renderExtDutyTab() {
   const startInput = document.getElementById('startDateExt');
   const endInput = document.getElementById('endDateExt');
   const catSelect = document.getElementById('categorySelectExt');
-  if (!startInput || !endInput || !catSelect) return;
+  const messageEl = document.getElementById('extDutyMessage');
+  const navBar = document.getElementById('extDutyNavBar');
+  if (!startInput || !endInput || !catSelect || !messageEl || !navBar) return;
   const startVal = startInput.value;
   const endVal = endInput.value;
   const catKey = catSelect.value;
   if (!startVal || !endVal) return;
-  const start = new Date(startVal);
-  const end = new Date(endVal);
-  const diffDays = Math.ceil((end - start) / (86400000)) + 1;
+  const start = parseDate(startVal);
+  const end = parseDate(endVal);
+  if (start > end) {
+    messageEl.textContent = '⚠ La date de début doit être antérieure ou égale à la date de fin.';
+    navBar.innerHTML = '';
+    return;
+  }
+  resetExtDutyPeriodIfNeeded(startVal, endVal);
+  const weeks = state.externalDuty.weeks || [];
+  const currentWeekIndex = state.externalDuty.currentWeekIndex || 0;
+  const currentWeek = weeks[currentWeekIndex] || { dates: [] };
+  const diffDays = Math.round((end - start) / 86400000) + 1;
   const gridTitle = document.getElementById('gridTitleExt');
   if (gridTitle) gridTitle.innerHTML = `Grille de Saisie - ${EXT_DUTY_CAT_LABELS[catKey] || catKey} (${diffDays} jours)`;
+  messageEl.textContent = `Période : ${formatDateRange(startVal, endVal)}`;
+  if (weeks.length > 1) {
+    navBar.innerHTML = `
+      <button class="btn secondary" style="min-width:120px;" ${currentWeekIndex === 0 ? 'disabled' : ''} onclick="changeExtDutyWeek(-1)">← Semaine précédente</button>
+      <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; font-size:0.95rem; color:var(--text-dim);">
+        <span>${formatDateRange(currentWeek.start, currentWeek.end)}</span>
+        <strong>Semaine ${currentWeekIndex + 1} / ${weeks.length}</strong>
+      </div>
+      <button class="btn secondary" style="min-width:120px;" ${currentWeekIndex === weeks.length - 1 ? 'disabled' : ''} onclick="changeExtDutyWeek(1)">Semaine suivante →</button>
+    `;
+  } else {
+    navBar.innerHTML = `<div style="font-size:0.95rem; color:var(--text-dim);">${formatDateRange(currentWeek.start, currentWeek.end)}</div>`;
+  }
   renderExtDutyPalette(catKey);
   const headerTr = document.getElementById('tableHeaderExt');
   if (!headerTr) return;
   let hHtml = '<tr><th style="background:var(--accent-blue); color:white; padding:10px; position:sticky; left:0; z-index:10;">Personnel</th>';
-  for (let i = 0; i < diffDays; i++) {
-    const d = dateAdd(startVal, i);
-    hHtml += `<th style="background:var(--accent-blue); color:white; padding:10px; text-align:center;">${dayName(d).slice(0,3)}<br>${fmtShort(d)}</th>`;
-  }
+  currentWeek.dates.forEach(date => {
+    hHtml += `<th style="background:var(--accent-blue); color:white; padding:10px; text-align:center;">${dayName(date).slice(0, 3)}<br>${fmtShort(date)}</th>`;
+  });
   hHtml += '</tr>';
   headerTr.innerHTML = hHtml;
   const bodyTb = document.getElementById('tableBodyExt');
@@ -257,16 +388,18 @@ export function renderExtDutyTab() {
   const activeStaff = state.staff.filter(s => s.status === 'actif' && (catKey === 'RESIDENT' ? s.cat.startsWith('RESIDENT') : s.cat === catKey));
   activeStaff.forEach(s => {
     let rowHtml = `<tr><td style="padding:10px; border:1px solid var(--border-soft); font-weight:600; background:#f9fbfc; position:sticky; left:0; z-index:5;">${s.name}<br><span class="badge ${s.cat}">${CATS[s.cat]?.short || s.cat}</span></td>`;
-    for (let d = 0; d < diffDays; d++) {
-      const date = dateAdd(startVal, d);
+    currentWeek.dates.forEach(date => {
       const key = `${s.matricule}_${date}`;
       const nightTag = state.externalDuty[catKey]?.records[key];
       const dayTask = state.schedule?.gridAssignments?.[key] || '';
+      const autoRest = !!state.externalDuty[catKey]?.autoRestDays?.[key];
       const isGarde = nightTag === 'GARDE';
       const isRest = nightTag === 'REPOS_POST_GARDE';
       let dayDisplay = '';
       if (isRest || dayTask === 'REPOS') {
-        dayDisplay = `<span class="badge" style="background:var(--color-repos); color:white; font-size:10px;">💤 REPOS</span>`;
+        const restLabel = autoRest ? '💤 REPOS (garde)' : '💤 REPOS';
+        const restTitle = autoRest ? 'Repos généré automatiquement par une garde de nuit' : 'Repos';
+        dayDisplay = `<span class="badge" style="background:var(--color-repos); color:white; font-size:10px;" title="${restTitle}">${restLabel}</span>`;
       } else {
         const dayDropVal = state.externalDuty[catKey]?.dayRecords?.[key];
         let content = `<span style="font-size:10px; color:var(--text-faint);">Glisser ici</span>`;
@@ -274,7 +407,7 @@ export function renderExtDutyTab() {
           const tagObj = getExtDutyTagInfo(catKey, dayDropVal);
           content = `<span class="badge" style="background:${tagObj.color}; color:white; font-size:10px; cursor:pointer;" title="Cliquer pour retirer" onclick="event.stopPropagation(); clearExtDutyDayCell('${catKey}', '${s.matricule}', '${date}')">${tagObj.label} ✕</span>`;
         }
-        dayDisplay = `<div class="drop-cell" style="min-height:30px; border:1px dashed #cbd5e0; border-radius:4px; display:flex; align-items:center; justify-content:center; cursor:pointer;" ondragover="event.preventDefault(); this.style.background='#e2e8f0';" ondragleave="this.style.background='';" ondrop="event.preventDefault(); this.style.background=''; setExtDutyDayCellV2('${catKey}', '${s.matricule}', '${date}', event.dataTransfer.getData('text/plain'));">${content}</div>`;
+        dayDisplay = `<div class="drop-cell" style="min-height:30px; border:1px dashed #cbd5e0; border-radius:4px; display:flex; align-items:center; justify-content:center; cursor:pointer;" ondragover="event.preventDefault(); this.style.background='#e2e8f0';" ondragleave="this.style.background='';" ondrop="event.preventDefault(); this.style.background=''; setExtDutyDayCellV2('${catKey}', '${s.matricule}', '${date}', event.dataTransfer.getData('text/plain'))">${content}</div>`;
       }
       rowHtml += `<td style="padding:8px; border:1px solid var(--border-soft); text-align:center;">
         <div style="margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed #eee;">
@@ -286,7 +419,7 @@ export function renderExtDutyTab() {
           <button class="night-duty-toggle ${isGarde ? 'active' : ''}" style="width:100%; border:1px solid #cbd5e0; border-radius:4px; padding:4px; font-size:10px; font-weight:bold; cursor:pointer; background:${isGarde ? 'var(--color-garde)' : (isRest ? 'var(--color-repos-nuit)' : '#fff')}; color:${isGarde || isRest ? 'white' : '#667'};" onclick="setExtDutyCellV2('${catKey}', '${s.matricule}', '${date}', '${isGarde ? '' : 'GARDE'}')">${isGarde ? '🌙 GARDE' : (isRest ? '💤 REPOS' : '— Nuit')}</button>
         </div>
       </td>`;
-    }
+    });
     rowHtml += '</tr>';
     bodyTb.innerHTML += rowHtml;
   });

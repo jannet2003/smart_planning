@@ -3,13 +3,11 @@ from typing import Optional
 
 
 class PersonnelBase(BaseModel):
+    matricule: Optional[str] = None
     nom: str
-    prenom: str
     role: str
-    quotite_horaire: Optional[int] = 40
     statut: Optional[str] = 'actif'
     actif: Optional[bool] = True
-    matricule: Optional[str] = None
     allowed_rooms: Optional[str] = ''
     
 
@@ -18,13 +16,11 @@ class PersonnelCreate(PersonnelBase):
 
 
 class PersonnelUpdate(BaseModel):
+    matricule:Optional[str]=None
     nom: Optional[str] = None
-    prenom: Optional[str] = None
     role: Optional[str] = None
-    quotite_horaire: Optional[int] = None
     statut: Optional[str] = None
     actif: Optional[bool] = None
-    matricule: Optional[str] = None
     allowed_rooms: Optional[str] = None
     
 
