@@ -1,41 +1,30 @@
 from pydantic import BaseModel, ConfigDict
-from datetime import datetime
+from datetime import date as Date
 from typing import Any, Optional
 
 
-class JourFerieBase(BaseModel):
-    date: str
-    libelle: str
+
+class PlanningBase(BaseModel):
+    personnel_id: Optional[int] = None
+    salle_id: Optional[int] = None
+    date: Optional[Date] = None
+    periode: Optional[str] = None
+    semaine_code: Optional[str] = None
+    status: Optional[str] = None
+    saved_count: Optional[int] = None
+    snapshot_personnel: Any = []
+    snapshot_salles: Any = []
+    affectations: Any = {}
 
 
-class JourFerieCreate(JourFerieBase):
+class PlanningCreate(PlanningBase):
     pass
 
 
-class JourFerieUpdate(BaseModel):
-    date: Optional[str] = None
-    libelle: Optional[str] = None
-
-
-class JourFerieResponse(JourFerieBase):
-    id: int
-
+class PlanningResponse(PlanningBase):
     model_config = ConfigDict(from_attributes=True)
 
 
-class PlanningSemaineBase(BaseModel):
-    semaine_code: str
-    snapshot_personnel: Any
-    snapshot_salles: Any
-    affectations: Any
-
-
-class PlanningSemaineCreate(PlanningSemaineBase):
-    pass
-
-
-class PlanningSemaineResponse(PlanningSemaineBase):
-    id: int
-    date_validation: datetime
-
-    model_config = ConfigDict(from_attributes=True)
+PlanningSemaineBase = PlanningBase
+PlanningSemaineCreate = PlanningCreate
+PlanningSemaineResponse = PlanningResponse

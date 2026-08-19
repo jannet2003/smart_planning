@@ -1,35 +1,67 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
-personnel_salle = Table(
-    'personnel_salle',
-    Base.metadata,
-    Column('personnel_id', Integer, ForeignKey('personnel.id', ondelete='CASCADE'), primary_key=True),
-    Column('salle_id', Integer, ForeignKey('salle.id', ondelete='CASCADE'), primary_key=True)
-)
-
-class CongePersonnel(Base):
-    __tablename__ = "conge_personnel"
-
-    id           = Column(Integer, primary_key=True, index=True)
-    personnel_id = Column(Integer, ForeignKey('personnel.id', ondelete='CASCADE'), nullable=False)
-    type         = Column(String, nullable=False)  # 'bloc_30' | 'flexible'
-    date_debut   = Column(String, nullable=False)
-    date_fin     = Column(String, nullable=False)
-    raison       = Column(String, nullable=True)
-
-    personnel    = relationship("Personnel", back_populates="conges")
-
 
 class Personnel(Base):
-    __tablename__ = "personnel"
+    __tablename__ = "PERSONNEL"
 
-    id        = Column(Integer, primary_key=True, index=True)
+    id = Column(Integer, primary_key=True, index=True)
     matricule = Column(String, unique=True, nullable=False, index=True)
-    nom       = Column(String, nullable=False)
+    nom_prenom = Column(String, nullable=False)
     categorie = Column(String, nullable=False)
-    statut    = Column(String, nullable=False, default='actif')
+    status = Column(String, nullable=False, default="actif")
 
-    salles    = relationship("Salle", secondary=personnel_salle, back_populates="personnels", lazy="joined")
-    conges    = relationship("CongePersonnel", back_populates="personnel", cascade="all, delete-orphan", lazy="selectin")
+    salles = relationship("Salle", secondary="PERSONNEL_SALLE", back_populates="personnels")
+    conges = relationship("Conge", back_populates="personnel", cascade="all, delete-orphan")
+    plannings = relationship("Planning", back_populates="personnel", cascade="all, delete-orphan")
+
+    @property
+    def nom(self):
+        return self.nom_prenom or ""
+
+    @nom.setter
+    def nom(self, value):
+        self.nom_prenom = value or ""
+
+    @property
+    def role(self):
+        return self.categorie or ""
+
+    @role.setter
+    def role(self, value):
+        self.categorie = value or ""
+
+    @property
+    def statut(self):
+        return self.status or "actif"
+
+    @statut.setter
+    def statut(self, value):
+        self.status = value or "actif"
+
+    @property
+    def actif(self):
+        return str(self.status or "actif").lower() in {"actif", "active", "disponible"}
+
+    @actif.setter
+    def actif(self, value):
+        self.status = "actif" if value else "hors_service"
+
+    @property
+    def allowed_rooms(self):
+        room_ids = [str(s.id) for s in self.salles]
+        return ",".join(room_ids)
+
+    @allowed_rooms.setter
+    def allowed_rooms(self, value):
+        return None
+
+
+class PersonnelSalle(Base):
+    __tablename__ = "PERSONNEL_SALLE"
+
+    personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), primary_key=True)
+    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), primary_key=True)
+
+

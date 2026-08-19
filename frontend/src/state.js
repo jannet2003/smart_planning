@@ -35,9 +35,12 @@ export function getTaskClass(taskName) {
   if (TASK_CLASSES[taskName]) return TASK_CLASSES[taskName];
   if (taskName === 'SCAN_M' || taskName === 'SCAN_A') return 'task-cell scanner';
   if (taskName === 'IRM_M' || taskName === 'IRM_A') return 'task-cell irm';
-  if (taskName === 'RAD_M' || taskName === 'RAD_A') return 'task-cell echo';
-  if (taskName === 'LECT_M' || taskName === 'LECT_A') return 'task-cell lecture';
-  return 'task-cell scanner';
+  if (taskName === 'RAD_M' || taskName === 'RAD_A' || taskName === 'Radio' || taskName.toLowerCase().includes('écho') || taskName.toLowerCase().includes('echo')) return 'task-cell echo';
+  if (taskName === 'LECT_M' || taskName === 'LECT_A' || taskName.toLowerCase().includes('lecture')) return 'task-cell lecture';
+  if (taskName.toLowerCase().includes('mammo')) return 'task-cell echo';
+  if (taskName.toLowerCase().includes('irm')) return 'task-cell irm';
+  if (taskName.toLowerCase().includes('scan')) return 'task-cell scanner';
+  return 'task-cell lecture';
 }
 
 export function getTaskLabel(taskName) {
@@ -49,6 +52,7 @@ export function getTaskLabel(taskName) {
   if (taskName === 'LECT_M' || taskName === 'LECT_A') return 'Salle de lecture';
   return taskName;
 }
+
 
 export const state = {
   staff: [],

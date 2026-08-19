@@ -10,6 +10,7 @@
 # Base de données locale (ne pas versionner les données)
 backend/planning.db
 data/*.db
+data/*.bak
 data/planning.db
 
 # Dossier généré par le sous-module / clone interne

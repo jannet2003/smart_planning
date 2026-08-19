@@ -4,9 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import os
 
+# Importer les modèles AVANT init_db() pour garantir leur enregistrement dans Base.metadata
+import app.models
 # Création des tables de base de données
 from app.db.database import engine, Base, init_db
-import app.models
 init_db()
 
 from app.api.api import api_router

@@ -1,22 +1,38 @@
-from sqlalchemy import Column, Integer, String, DateTime, JSON
-from datetime import datetime
+from sqlalchemy import Column, Integer, String, Date, ForeignKey
+from sqlalchemy.orm import relationship
 from app.db.database import Base
 
-class JourFerie(Base):
-    __tablename__ = "jour_ferie"
 
-    id      = Column(Integer, primary_key=True, index=True)
-    date    = Column(String, unique=True, nullable=False, index=True)
+class Conge(Base):
+    __tablename__ = "CONGE"
+
+    personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), primary_key=True)
+    type_conge = Column(String, primary_key=True, nullable=False)
+    date_debut = Column(Date, nullable=False)
+    date_fin = Column(Date, nullable=False)
+    raison = Column(String, nullable=True)
+
+    personnel = relationship("Personnel", back_populates="conges")
+
+
+class JourFerie(Base):
+    __tablename__ = "JOUR_FERIE"
+
+    date = Column(Date, primary_key=True)
     libelle = Column(String, nullable=False)
 
 
-class PlanningSemaine(Base):
-    __tablename__ = "planning_semaine"
+class Planning(Base):
+    __tablename__ = "PLANNING"
 
-    id                 = Column(Integer, primary_key=True, index=True)
-    semaine_code       = Column(String, index=True)
-    date_validation    = Column(DateTime, default=datetime.utcnow)
-    
-    snapshot_personnel = Column(JSON, nullable=False)
-    snapshot_salles    = Column(JSON, nullable=False)
-    affectations       = Column(JSON, nullable=False)
+    personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), primary_key=True)
+    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), nullable=False)
+    date = Column(Date, primary_key=True, nullable=False)
+    periode = Column(String, primary_key=True, nullable=False)
+
+    personnel = relationship("Personnel", back_populates="plannings")
+    salle = relationship("Salle", back_populates="plannings")
+
+
+# Backwards-compatibility alias for legacy imports during the migration phase.
+PlanningSemaine = Planning

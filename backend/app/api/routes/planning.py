@@ -1,12 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional, Any, Union, Dict
+from datetime import date as DateType, datetime, timedelta
 
 from app.db.database import get_db
-from app.models.planning import PlanningSemaine
-from app.models.salle import Salle
 from app.models.personnel import Personnel
-from app.schemas.planning import PlanningSemaineCreate, PlanningSemaineResponse
+from app.models.planning import Conge, JourFerie, Planning
+from app.models.salle import IndisponibiliteSalle, Salle
+from app.schemas.planning import (
+    PlanningCreate,
+    PlanningResponse,
+    PlanningSemaineCreate,
+    PlanningSemaineResponse,
+)
 
 router = APIRouter()
 
@@ -17,190 +23,238 @@ def _payload_from_model(data):
     return data.dict()
 
 
-@router.get("/history", response_model=List[PlanningSemaineResponse])
+@router.get("/history", response_model=List[PlanningResponse])
 def get_planning_history(db: Session = Depends(get_db)):
-    return (
-        db.query(PlanningSemaine)
-        .order_by(PlanningSemaine.date_validation.desc())
-        .all()
-    )
+    return db.query(Planning).order_by(Planning.date.desc()).all()
 
 
-@router.get("/", response_model=List[PlanningSemaineResponse])
+@router.get("", response_model=List[PlanningResponse])
+@router.get("/", response_model=List[PlanningResponse], include_in_schema=False)
 def get_all_plannings(db: Session = Depends(get_db)):
-    return (
-        db.query(PlanningSemaine)
-        .order_by(PlanningSemaine.date_validation.desc())
-        .all()
-    )
+    return db.query(Planning).order_by(Planning.date.desc()).all()
 
 
-@router.get("/{semaine_code}", response_model=PlanningSemaineResponse)
-def get_planning_by_week(semaine_code: str, db: Session = Depends(get_db)):
-    item = db.query(PlanningSemaine).filter(PlanningSemaine.semaine_code == semaine_code).first()
-    if not item:
-        raise HTTPException(status_code=404, detail="Planning non trouvé pour cette semaine")
-    return item
-
-
-def _validate_senior_room_combinations(payload: dict, db: Session):
-    snapshot_salles = payload.get("snapshot_salles") or []
-    snapshot_personnel = payload.get("snapshot_personnel") or []
-    affectations = payload.get("affectations") or {}
-
-    rooms_by_key = {}
-    for r in snapshot_salles:
-        r_id = str(r.get("id"))
-        r_name = r.get("name") or r.get("nom")
-        if r_id: rooms_by_key[r_id] = r
-        if r_name: rooms_by_key[r_name] = r
-
-    db_salles = db.query(Salle).all()
-    for r in db_salles:
-        r_id = str(r.id)
-        r_name = r.nom
-        compat_ids = [str(c.id) for c in r.compatible_rooms]
-        if r_id not in rooms_by_key:
-            rooms_by_key[r_id] = {
-                "id": r.id, "name": r.nom, "senior_mode": r.senior_mode,
-                "compatible_salle_ids": compat_ids
+@router.get("/{week_code}")
+def get_planning_by_week(week_code: str, db: Session = Depends(get_db)):
+    try:
+        start_date = datetime.strptime(week_code, "%Y-%m-%d").date()
+        end_date = start_date + timedelta(days=6)
+        records = (
+            db.query(Planning)
+            .filter(Planning.date >= start_date, Planning.date <= end_date)
+            .all()
+        )
+        return [
+            {
+                "personnel_id": r.personnel_id,
+                "salle_id": r.salle_id,
+                "date": str(r.date),
+                "periode": r.periode,
             }
-        if r_name not in rooms_by_key:
-            rooms_by_key[r_name] = {
-                "id": r.id, "name": r.nom, "senior_mode": r.senior_mode,
-                "compatible_salle_ids": compat_ids
+            for r in records
+        ]
+    except ValueError:
+        records = db.query(Planning).all()
+        return [
+            {
+                "personnel_id": r.personnel_id,
+                "salle_id": r.salle_id,
+                "date": str(r.date),
+                "periode": r.periode,
             }
-
-    seniors_mats = set()
-    for p in snapshot_personnel:
-        cat = p.get("categorie") or p.get("cat") or p.get("role")
-        if cat == "SENIOR":
-            seniors_mats.add(str(p.get("matricule") or p.get("id")))
-
-    db_personnel = db.query(Personnel).filter(Personnel.categorie == "SENIOR").all()
-    for p in db_personnel:
-        if p.matricule:
-            seniors_mats.add(p.matricule)
-        seniors_mats.add(str(p.id))
-
-    grid = affectations.get("gridAssignments") or {}
-    additional = affectations.get("additionalSeniorAssignments") or {}
-
-    agent_date_rooms = {}
-    for key, val in grid.items():
-        if not val or val in ("REPOS", "CONGE", "FERIE", "GARDE"):
-            continue
-        parts = key.rsplit("_", 1)
-        if len(parts) == 2:
-            mat, date = parts[0], parts[1]
-            if mat in seniors_mats:
-                agent_date_rooms.setdefault((mat, date), []).append(val)
-
-    for key, val_list in additional.items():
-        if not val_list:
-            continue
-        parts = key.rsplit("_", 1)
-        if len(parts) == 2:
-            mat, date = parts[0], parts[1]
-            if mat in seniors_mats:
-                for v in val_list:
-                    if v and v not in ("REPOS", "CONGE", "FERIE", "GARDE"):
-                        agent_date_rooms.setdefault((mat, date), []).append(v)
-
-    for (mat, date), rooms in agent_date_rooms.items():
-        unique_rooms = list(set(rooms))
-        if len(unique_rooms) <= 1:
-            continue
-
-        for i in range(len(unique_rooms)):
-            for j in range(i + 1, len(unique_rooms)):
-                r1_key = unique_rooms[i]
-                r2_key = unique_rooms[j]
-                r1 = rooms_by_key.get(str(r1_key)) or rooms_by_key.get(r1_key)
-                r2 = rooms_by_key.get(str(r2_key)) or rooms_by_key.get(r2_key)
-
-                if not r1 or not r2:
-                    continue
-
-                r1_name = r1.get("name") or r1.get("nom") or str(r1_key)
-                r2_name = r2.get("name") or r2.get("nom") or str(r2_key)
-                r1_mode = r1.get("senior_mode") or r1.get("seniorMode") or "EXCLUSIVE"
-                r2_mode = r2.get("senior_mode") or r2.get("seniorMode") or "EXCLUSIVE"
-
-                if r1_mode == "EXCLUSIVE":
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Affectation impossible : {r1_name} est une salle exclusive. Ce senior ne peut pas être affecté à une autre salle dans le même poste."
-                    )
-                if r2_mode == "EXCLUSIVE":
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Affectation impossible : {r2_name} est une salle exclusive. Ce senior ne peut pas être affecté à une autre salle dans le même poste."
-                    )
-
-                def permits(room, other):
-                    rmode = room.get("senior_mode") or room.get("seniorMode") or "EXCLUSIVE"
-                    if rmode == "COMBINABLE":
-                        return True
-                    if rmode in ("SELECTIVE", "SEULEMENT_CERTAINES"):
-                        compat = room.get("compatible_salle_ids") or room.get("seniorCompatibleRooms") or []
-                        if isinstance(compat, str):
-                            compat = [c.strip() for c in compat.split(",") if c.strip()]
-                        other_id = str(other.get("id"))
-                        other_name = (other.get("name") or other.get("nom") or "").strip()
-                        return (other_id in [str(c) for c in compat]) or (other_name in compat)
-                    return False
-
-                # RÈGLE MÉTIER: Si A est COMBINABLE et B est SÉLECTIF, la combinaison est autorisée si B a sélectionné A.
-                # Donc:
-                # Si les deux sont COMBINABLE -> OK
-                # Si un est COMBINABLE et l'autre est SELECTIF -> le SELECTIF doit avoir sélectionné le COMBINABLE
-                # Si les deux sont SELECTIF -> chacun doit avoir sélectionné l'autre
-                r1_is_comb = (r1_mode == "COMBINABLE")
-                r2_is_comb = (r2_mode == "COMBINABLE")
-
-                if r1_is_comb and r2_is_comb:
-                    pass
-                elif r1_is_comb and not r2_is_comb:
-                    if not permits(r2, r1):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Affectation impossible : La salle {r2_name} ne permet pas d'être combinée avec {r1_name}."
-                        )
-                elif not r1_is_comb and r2_is_comb:
-                    if not permits(r1, r2):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Affectation impossible : La salle {r1_name} ne permet pas d'être combinée avec {r2_name}."
-                        )
-                else:
-                    if not permits(r1, r2) or not permits(r2, r1):
-                        raise HTTPException(
-                            status_code=400,
-                            detail=f"Affectation impossible : Les salles {r1_name} et {r2_name} ne sont pas compatibles entre elles."
-                        )
+            for r in records
+        ]
 
 
-@router.post("/", response_model=PlanningSemaineResponse)
-def save_planning(data: PlanningSemaineCreate, db: Session = Depends(get_db)):
-    if not data.semaine_code or not data.semaine_code.strip():
-        raise HTTPException(status_code=422, detail="Le code de semaine est obligatoire")
-
+@router.post("", response_model=Union[PlanningResponse, Dict[str, Any]])
+@router.post("/", response_model=Union[PlanningResponse, Dict[str, Any]], include_in_schema=False)
+def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
     payload = _payload_from_model(data)
-    payload["semaine_code"] = payload.get("semaine_code", "").strip()
-    payload["snapshot_personnel"] = payload.get("snapshot_personnel") or []
-    payload["snapshot_salles"] = payload.get("snapshot_salles") or []
-    payload["affectations"] = payload.get("affectations") or {}
 
-    _validate_senior_room_combinations(payload, db)
+    # 1. Vérifier s'il s'agit d'une sauvegarde de semaine complète (batch)
+    if payload.get("semaine_code") or (payload.get("affectations") and isinstance(payload.get("affectations"), dict)):
+        semaine_code = payload.get("semaine_code") or ""
+        affectations = payload.get("affectations") or {}
+        grid = affectations.get("gridAssignments") or {}
+        nights = affectations.get("nightAssignments") or {}
+        additional = affectations.get("additionalSeniorAssignments") or {}
+        dates_list = affectations.get("datesList") or []
 
-    existing = db.query(PlanningSemaine).filter(PlanningSemaine.semaine_code == payload["semaine_code"]).first()
-    if existing:
-        db.delete(existing)
+        if not dates_list and semaine_code:
+            try:
+                start = datetime.strptime(semaine_code, "%Y-%m-%d").date()
+                dates_list = [str(start + timedelta(days=i)) for i in range(7)]
+            except Exception:
+                dates_list = []
+
+        all_personnel = {p.matricule: p for p in db.query(Personnel).all()}
+        all_personnel_by_id = {p.id: p for p in db.query(Personnel).all()}
+        all_salles_by_name = {s.nom.strip().lower(): s for s in db.query(Salle).all()}
+        all_salles_by_id = {s.id: s for s in db.query(Salle).all()}
+
+        if dates_list:
+            min_date = min(dates_list)
+            max_date = max(dates_list)
+            try:
+                d_min = datetime.strptime(min_date, "%Y-%m-%d").date()
+                d_max = datetime.strptime(max_date, "%Y-%m-%d").date()
+                db.query(Planning).filter(Planning.date >= d_min, Planning.date <= d_max).delete(synchronize_session=False)
+            except Exception:
+                pass
+
+        saved_count = 0
+
+        for key, task_name in grid.items():
+            if not task_name or task_name in ["REPOS", "CONGE", "FERIE"]:
+                continue
+            parts = key.rsplit("_", 1)
+            if len(parts) != 2:
+                continue
+            mat, date_str = parts[0], parts[1]
+            try:
+                task_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+
+            person = all_personnel.get(mat) or (all_personnel_by_id.get(int(mat)) if mat.isdigit() else None)
+            if not person:
+                continue
+
+            salle = all_salles_by_name.get(str(task_name).strip().lower())
+            if not salle:
+                salle = all_salles_by_id.get(int(task_name)) if str(task_name).isdigit() else None
+            if not salle:
+                continue
+
+            is_holiday = db.get(JourFerie, task_date) is not None
+            if is_holiday:
+                continue
+            has_leave = db.query(Conge).filter(
+                Conge.personnel_id == person.id,
+                Conge.date_debut <= task_date,
+                Conge.date_fin >= task_date,
+            ).first() is not None
+            if has_leave:
+                continue
+
+            existing = db.query(Planning).filter_by(
+                personnel_id=person.id,
+                salle_id=salle.id,
+                date=task_date,
+                periode="jour",
+            ).first()
+            if not existing:
+                item = Planning(
+                    personnel_id=person.id,
+                    salle_id=salle.id,
+                    date=task_date,
+                    periode="jour",
+                )
+                db.add(item)
+                saved_count += 1
+
+        for key, extra_rooms in additional.items():
+            if not isinstance(extra_rooms, list):
+                continue
+            parts = key.rsplit("_", 1)
+            if len(parts) != 2:
+                continue
+            mat, date_str = parts[0], parts[1]
+            try:
+                task_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            person = all_personnel.get(mat)
+            if not person:
+                continue
+            for r_name in extra_rooms:
+                salle = all_salles_by_name.get(str(r_name).strip().lower())
+                if not salle:
+                    continue
+                existing = db.query(Planning).filter_by(
+                    personnel_id=person.id,
+                    salle_id=salle.id,
+                    date=task_date,
+                    periode="jour",
+                ).first()
+                if not existing:
+                    db.add(Planning(personnel_id=person.id, salle_id=salle.id, date=task_date, periode="jour"))
+                    saved_count += 1
+
+        for key, night_task in nights.items():
+            if night_task != "GARDE":
+                continue
+            parts = key.rsplit("_", 1)
+            if len(parts) != 2:
+                continue
+            mat, date_str = parts[0], parts[1]
+            try:
+                task_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except Exception:
+                continue
+            person = all_personnel.get(mat)
+            if not person:
+                continue
+            default_salle = all_salles_by_name.get("scanner") or db.query(Salle).first()
+            if default_salle:
+                existing = db.query(Planning).filter_by(
+                    personnel_id=person.id,
+                    salle_id=default_salle.id,
+                    date=task_date,
+                    periode="nuit",
+                ).first()
+                if not existing:
+                    db.add(Planning(personnel_id=person.id, salle_id=default_salle.id, date=task_date, periode="nuit"))
+                    saved_count += 1
+
         db.commit()
+        return {
+            "status": "success",
+            "semaine_code": semaine_code,
+            "saved_count": saved_count,
+            "affectations": affectations,
+        }
 
-    item = PlanningSemaine(**payload)
+    # 2. Sauvegarde unitaire standard
+    if not all((data.personnel_id, data.salle_id, data.date, data.periode)):
+        raise HTTPException(
+            status_code=422,
+            detail="personnel_id, salle_id, date et periode sont requis",
+        )
+    if db.get(Personnel, data.personnel_id) is None:
+        raise HTTPException(status_code=404, detail="Personnel non trouvé")
+    if db.get(Salle, data.salle_id) is None:
+        raise HTTPException(status_code=404, detail="Salle non trouvée")
+    if db.get(JourFerie, data.date) is not None:
+        raise HTTPException(status_code=409, detail="Affectation interdite un jour férié")
+
+    conge = db.query(Conge).filter(
+        Conge.personnel_id == data.personnel_id,
+        Conge.date_debut <= data.date,
+        Conge.date_fin >= data.date,
+    ).first()
+    if conge is not None:
+        raise HTTPException(status_code=409, detail="Affectation interdite pendant un congé")
+
+    indisponibilite = db.query(IndisponibiliteSalle).filter(
+        IndisponibiliteSalle.salle_id == data.salle_id,
+        IndisponibiliteSalle.date_debut <= data.date,
+        IndisponibiliteSalle.date_fin >= data.date,
+    ).first()
+    if indisponibilite is not None:
+        raise HTTPException(status_code=409, detail="Salle indisponible à cette date")
+
+    item = Planning(
+        personnel_id=data.personnel_id,
+        salle_id=data.salle_id,
+        date=data.date,
+        periode=data.periode,
+    )
     db.add(item)
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Cette affectation existe déjà")
     db.refresh(item)
     return item

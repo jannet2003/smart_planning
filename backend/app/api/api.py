@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.routes import personnel, salles, planning, feries, conges, indisponibilites
+from app.api.routes import conges, jours_feries, personnel, salles, planning
 
 api_router = APIRouter()
 
@@ -10,6 +10,5 @@ def health_check():
 api_router.include_router(personnel.router, prefix="/personnel", tags=["personnel"])
 api_router.include_router(salles.router, prefix="/salles", tags=["salles"])
 api_router.include_router(conges.router, prefix="/conges", tags=["conges"])
-api_router.include_router(indisponibilites.router, prefix="/indisponibilites", tags=["indisponibilites"])
-api_router.include_router(feries.router, prefix="/jours-feries", tags=["jours-feries"])
+api_router.include_router(jours_feries.router, prefix="/jours-feries", tags=["jours-feries"])
 api_router.include_router(planning.router, prefix="/planning", tags=["planning"])
