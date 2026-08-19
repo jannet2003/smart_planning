@@ -7,16 +7,21 @@
 *.pyo
 *.pyc
 
-# Base de données locale (ne pas versionner les données)
+# Fichiers cache pytest
+.pytest_cache/
+
+# Base de données locale - on garde data/planning.db dans le repo
+# pour que le projet soit utilisable directement après clonage
 backend/planning.db
-data/*.db
 data/*.bak
-data/planning.db
+data/*_backup*
+data/*_copy*
 
 # Dossier généré par le sous-module / clone interne
 radiologie-planning/
 
 # Fichiers de configuration IDE
+.vscode/
 .idea/
 *.suo
 *.user
