@@ -91,3 +91,11 @@ class IndisponibiliteSalle(Base):
 
     salle = relationship("Salle", back_populates="indisponibilites")
 
+    @property
+    def motif(self):
+        return self.raison
+
+    @motif.setter
+    def motif(self, value):
+        self.raison = value
+

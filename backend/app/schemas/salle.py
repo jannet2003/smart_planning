@@ -38,3 +38,26 @@ class SalleResponse(SalleBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class IndisponibiliteSalleBase(BaseModel):
+    salle_id: int
+    date_debut: str
+    date_fin: str
+    raison: Optional[str] = None
+    motif: Optional[str] = None
+
+
+class IndisponibiliteSalleCreate(IndisponibiliteSalleBase):
+    pass
+
+
+class IndisponibiliteSalleUpdate(BaseModel):
+    date_debut: Optional[str] = None
+    date_fin: Optional[str] = None
+    raison: Optional[str] = None
+    motif: Optional[str] = None
+
+
+class IndisponibiliteSalleResponse(IndisponibiliteSalleBase):
+    model_config = ConfigDict(from_attributes=True)

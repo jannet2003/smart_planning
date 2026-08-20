@@ -161,3 +161,50 @@ def test_save_and_get_weekly_planning():
     assert get_week.status_code == 200
     records = get_week.json()
     assert len(records) >= 3
+
+
+def test_indisponibilite_salle_lifecycle():
+    salle = client.post("/api/salles/", json={"nom": "Scanner B"}).json()
+    sid = salle["id"]
+
+    # Creation
+    indisp_payload = {
+        "salle_id": sid,
+        "date_debut": "2026-09-01",
+        "date_fin": "2026-09-05",
+        "raison": "Maintenance annuelle"
+    }
+    create_res = client.post("/api/indisponibilites/", json=indisp_payload)
+    assert create_res.status_code == 200
+    data = create_res.json()
+    assert data["salle_id"] == sid
+    assert data["raison"] == "Maintenance annuelle"
+
+    # Get list
+    list_res = client.get(f"/api/indisponibilites?salle_id={sid}")
+    assert list_res.status_code == 200
+    assert len(list_res.json()) == 1
+
+    # Delete
+    del_res = client.delete(f"/api/indisponibilites/{sid}/2026-09-01")
+    assert del_res.status_code == 204
+
+    # Verify deleted
+    list_after = client.get(f"/api/indisponibilites?salle_id={sid}").json()
+    assert len(list_after) == 0
+
+
+def test_feries_and_personnel_filters():
+    # Test feries router
+    f_res = client.post("/api/feries/", json={"date": "2026-11-01", "libelle": "Toussaint"})
+    assert f_res.status_code == 200
+    get_f = client.get("/api/feries/2026-11-01")
+    assert get_f.status_code == 200
+    assert get_f.json()["libelle"] == "Toussaint"
+
+    # Test personnel role filtering
+    client.post("/api/personnel/", json={"nom": "Senior 1", "role": "SENIOR", "statut": "actif"})
+    client.post("/api/personnel/", json={"nom": "Tech 1", "role": "TECH", "statut": "actif"})
+
+    seniors = client.get("/api/personnel?role=SENIOR").json()
+    assert any(p["nom"] == "Senior 1" for p in seniors)

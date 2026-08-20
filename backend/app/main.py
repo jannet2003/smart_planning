@@ -10,9 +10,10 @@ import app.models
 from app.db.database import engine, Base, init_db
 init_db()
 
+from app.core.config import PROJECT_NAME
 from app.api.api import api_router
 
-app = FastAPI(title="SmartPlanning Radiologie API")
+app = FastAPI(title=PROJECT_NAME)
 
 # Autoriser les requêtes CORS
 app.add_middleware(

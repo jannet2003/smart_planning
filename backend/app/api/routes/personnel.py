@@ -67,9 +67,9 @@ def get_all_personnel(
 ):
     query = db.query(Personnel)
     if role:
-        query = query.filter(Personnel.role == role)
+        query = query.filter(Personnel.categorie.ilike(role.strip()))
     if statut:
-        query = query.filter(Personnel.statut == statut)
+        query = query.filter(Personnel.status.ilike(statut.strip()))
     return [_normalize_personnel_payload(item) for item in query.all()]
 
 
