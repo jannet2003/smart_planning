@@ -12,9 +12,28 @@ export function dateAdd(dateStr, days) {
   return formatIsoDate(d);
 }
 
+export function formatDateDMY(dateStr) {
+  if (!dateStr) return '';
+  const parts = String(dateStr).split('T')[0].split('-');
+  if (parts.length === 3) {
+    const [year, month, day] = parts;
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+  }
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
 export function fmtShort(dateStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const d = new Date(year, month - 1, day);
+  if (!dateStr) return '';
+  const parts = String(dateStr).split('T')[0].split('-');
+  if (parts.length === 3) {
+    return `${parts[2].padStart(2, '0')}/${parts[1].padStart(2, '0')}`;
+  }
+  const d = new Date(dateStr + 'T00:00:00');
   return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' });
 }
 

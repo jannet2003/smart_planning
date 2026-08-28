@@ -10,8 +10,16 @@ class Salle(Base):
     nom = Column(String, unique=True, nullable=False)
     mode_affectation_senior = Column(String, nullable=False, default="exclusif")
 
+    min_senior = Column(Integer, nullable=False, default=1)
+    max_senior = Column(Integer, nullable=False, default=2)
+    min_resident = Column(Integer, nullable=False, default=1)
+    max_resident = Column(Integer, nullable=False, default=3)
+    min_inf = Column(Integer, nullable=False, default=0)
+    max_inf = Column(Integer, nullable=False, default=1)
+    min_tech = Column(Integer, nullable=False, default=1)
+    max_tech = Column(Integer, nullable=False, default=3)
+
     personnels = relationship("Personnel", secondary="PERSONNEL_SALLE", back_populates="salles")
-    besoins = relationship("BesoinSalle", back_populates="salle", cascade="all, delete-orphan")
     compatibilites = relationship(
         "CompatibiliteSenior",
         foreign_keys="[CompatibiliteSenior.salle_id]",
@@ -58,17 +66,6 @@ class Salle(Base):
     @compatible_rooms.setter
     def compatible_rooms(self, value):
         return None
-
-
-class BesoinSalle(Base):
-    __tablename__ = "BESOIN_SALLE"
-
-    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), primary_key=True)
-    categorie = Column(String, primary_key=True, nullable=False)
-    minimum = Column(Integer, nullable=False, default=0)
-    maximum = Column(Integer, nullable=False, default=0)
-
-    salle = relationship("Salle", back_populates="besoins")
 
 
 class CompatibiliteSenior(Base):

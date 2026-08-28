@@ -4,16 +4,15 @@ import sys
 
 def check_and_migrate_database(db_path: pathlib.Path):
     """
-    Vérifie et assure l'existence des 9 tables canoniques de l'application SmartPlanning Radiologie:
+    Vérifie et assure l'existence des 8 tables canoniques de l'application SmartPlanning Radiologie:
     1. PERSONNEL
-    2. SALLE
-    3. BESOIN_SALLE
-    4. COMPATIBILITE_SENIOR
-    5. INDISPONIBILITE_SALLE
-    6. CONGE
-    7. JOUR_FERIE
-    8. PERSONNEL_SALLE
-    9. PLANNING
+    2. SALLE (avec besoins seniors, résidents, infirmiers, techniciens intégrés)
+    3. COMPATIBILITE_SENIOR
+    4. INDISPONIBILITE_SALLE
+    5. CONGE
+    6. JOUR_FERIE
+    7. PERSONNEL_SALLE
+    8. PLANNING
     """
     print(f"Vérification de la base de données : {db_path}")
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -38,23 +37,56 @@ def check_and_migrate_database(db_path: pathlib.Path):
         CREATE TABLE IF NOT EXISTS SALLE (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nom VARCHAR NOT NULL UNIQUE,
-            mode_affectation_senior VARCHAR NOT NULL DEFAULT 'exclusif'
+            mode_affectation_senior VARCHAR NOT NULL DEFAULT 'exclusif',
+            min_senior INTEGER NOT NULL DEFAULT 1,
+            max_senior INTEGER NOT NULL DEFAULT 2,
+            min_resident INTEGER NOT NULL DEFAULT 1,
+            max_resident INTEGER NOT NULL DEFAULT 3,
+            min_inf INTEGER NOT NULL DEFAULT 0,
+            max_inf INTEGER NOT NULL DEFAULT 1,
+            min_tech INTEGER NOT NULL DEFAULT 1,
+            max_tech INTEGER NOT NULL DEFAULT 3
         );
     """)
 
-    # 3. Table BESOIN_SALLE
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS BESOIN_SALLE (
-            salle_id INTEGER NOT NULL,
-            categorie VARCHAR NOT NULL,
-            minimum INTEGER NOT NULL DEFAULT 0,
-            maximum INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (salle_id, categorie),
-            FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
-        );
-    """)
+    # Si la table SALLE existait déjà sans les colonnes de besoins, on les ajoute
+    cur.execute("PRAGMA table_info(SALLE);")
+    existing_cols = [c[1] for c in cur.fetchall()]
+    besoin_cols = {
+        "min_senior": "INTEGER NOT NULL DEFAULT 1",
+        "max_senior": "INTEGER NOT NULL DEFAULT 2",
+        "min_resident": "INTEGER NOT NULL DEFAULT 1",
+        "max_resident": "INTEGER NOT NULL DEFAULT 3",
+        "min_inf": "INTEGER NOT NULL DEFAULT 0",
+        "max_inf": "INTEGER NOT NULL DEFAULT 1",
+        "min_tech": "INTEGER NOT NULL DEFAULT 1",
+        "max_tech": "INTEGER NOT NULL DEFAULT 3",
+    }
+    for col_name, col_def in besoin_cols.items():
+        if col_name not in existing_cols:
+            cur.execute(f"ALTER TABLE SALLE ADD COLUMN {col_name} {col_def};")
 
-    # 4. Table COMPATIBILITE_SENIOR
+    # Si BESOIN_SALLE existe, migrer ses valeurs vers SALLE puis supprimer BESOIN_SALLE
+    cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='BESOIN_SALLE';")
+    if cur.fetchone():
+        print("Migration des données de BESOIN_SALLE vers SALLE...")
+        cur.execute("SELECT salle_id, categorie, minimum, maximum FROM BESOIN_SALLE;")
+        besoins_rows = cur.fetchall()
+        for salle_id, categorie, minimum, maximum in besoins_rows:
+            cat_lower = (categorie or "").strip().lower()
+            if cat_lower == "senior":
+                cur.execute("UPDATE SALLE SET min_senior = ?, max_senior = ? WHERE id = ?", (minimum, maximum, salle_id))
+            elif cat_lower == "resident":
+                cur.execute("UPDATE SALLE SET min_resident = ?, max_resident = ? WHERE id = ?", (minimum, maximum, salle_id))
+            elif cat_lower in {"infirmier", "inf"}:
+                cur.execute("UPDATE SALLE SET min_inf = ?, max_inf = ? WHERE id = ?", (minimum, maximum, salle_id))
+            elif cat_lower in {"technicien", "tech", "manipulateur"}:
+                cur.execute("UPDATE SALLE SET min_tech = ?, max_tech = ? WHERE id = ?", (minimum, maximum, salle_id))
+        
+        cur.execute("DROP TABLE BESOIN_SALLE;")
+        print("Table BESOIN_SALLE supprimée et intégrée dans SALLE.")
+
+    # 3. Table COMPATIBILITE_SENIOR
     cur.execute("""
         CREATE TABLE IF NOT EXISTS COMPATIBILITE_SENIOR (
             salle_id INTEGER NOT NULL,
@@ -65,7 +97,7 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 5. Table INDISPONIBILITE_SALLE
+    # 4. Table INDISPONIBILITE_SALLE
     cur.execute("""
         CREATE TABLE IF NOT EXISTS INDISPONIBILITE_SALLE (
             salle_id INTEGER NOT NULL,
@@ -77,7 +109,7 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 6. Table CONGE
+    # 5. Table CONGE
     cur.execute("""
         CREATE TABLE IF NOT EXISTS CONGE (
             personnel_id INTEGER NOT NULL,
@@ -90,7 +122,7 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 7. Table JOUR_FERIE
+    # 6. Table JOUR_FERIE
     cur.execute("""
         CREATE TABLE IF NOT EXISTS JOUR_FERIE (
             date DATE PRIMARY KEY,
@@ -98,7 +130,7 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 8. Table PERSONNEL_SALLE
+    # 7. Table PERSONNEL_SALLE
     cur.execute("""
         CREATE TABLE IF NOT EXISTS PERSONNEL_SALLE (
             personnel_id INTEGER NOT NULL,
@@ -109,7 +141,7 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 9. Table PLANNING
+    # 8. Table PLANNING
     cur.execute("""
         CREATE TABLE IF NOT EXISTS PLANNING (
             personnel_id INTEGER NOT NULL,
@@ -130,7 +162,6 @@ def check_and_migrate_database(db_path: pathlib.Path):
         cur.execute("DELETE FROM COMPATIBILITE_SENIOR WHERE salle_id NOT IN (SELECT id FROM SALLE) OR salle_compatible_id NOT IN (SELECT id FROM SALLE);")
         cur.execute("DELETE FROM INDISPONIBILITE_SALLE WHERE salle_id NOT IN (SELECT id FROM SALLE);")
         cur.execute("DELETE FROM CONGE WHERE personnel_id NOT IN (SELECT id FROM PERSONNEL);")
-        cur.execute("DELETE FROM BESOIN_SALLE WHERE salle_id NOT IN (SELECT id FROM SALLE);")
         cur.execute("DELETE FROM PLANNING WHERE personnel_id NOT IN (SELECT id FROM PERSONNEL) OR salle_id NOT IN (SELECT id FROM SALLE);")
         conn.commit()
 

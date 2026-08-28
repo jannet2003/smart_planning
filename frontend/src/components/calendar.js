@@ -1,5 +1,6 @@
 import { state, renderAll } from '../state.js';
 import * as api from '../api/api.js';
+import { formatDateDMY } from '../utils/helpers.js';
 
 async function refreshHolidaysFromApi() {
   const joursFeries = await api.fetchJoursFeries();
@@ -18,6 +19,59 @@ export function initCalendar() {
   window.navigateCalendar = navigateCalendar;
   window.syncCalendarWithInputDate = syncCalendarWithInputDate;
   window.toggleDayHoliday = toggleDayHoliday;
+  window.openAddHolidayModal = openAddHolidayModal;
+  window.closeAddHolidayModal = closeAddHolidayModal;
+}
+
+// Attachement immédiat sur window
+window.getHoliday = getHoliday;
+window.addHoliday = addHoliday;
+window.removeHoliday = removeHoliday;
+window.renderHolidaysTable = renderHolidaysTable;
+window.renderInteractiveCalendar = renderInteractiveCalendar;
+window.navigateCalendar = navigateCalendar;
+window.syncCalendarWithInputDate = syncCalendarWithInputDate;
+window.toggleDayHoliday = toggleDayHoliday;
+window.openAddHolidayModal = openAddHolidayModal;
+window.closeAddHolidayModal = closeAddHolidayModal;
+
+export function openAddHolidayModal(presetDate = '') {
+  const modal = document.getElementById('add-holiday-modal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+  if (window.initDatePickers) window.initDatePickers();
+  const d = document.getElementById('h-date');
+  if (d) {
+    if (presetDate) {
+      if (d._flatpickr) d._flatpickr.setDate(presetDate, true);
+      else d.value = presetDate;
+      syncCalendarWithInputDate(presetDate);
+    } else {
+      if (d._flatpickr) d._flatpickr.clear();
+      else d.value = '';
+    }
+  }
+  const n = document.getElementById('h-name');
+  if (n) {
+    setTimeout(() => n.focus(), 50);
+  }
+}
+
+export function closeAddHolidayModal() {
+  const modal = document.getElementById('add-holiday-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+  const d = document.getElementById('h-date');
+  if (d) {
+    if (d._flatpickr) d._flatpickr.clear();
+    else d.value = '';
+  }
+  const n = document.getElementById('h-name');
+  if (n) n.value = '';
 }
 
 export function getHoliday(dateStr) {
@@ -27,13 +81,14 @@ export function getHoliday(dateStr) {
 export async function addHoliday() {
   const date = document.getElementById('h-date').value;
   const name = document.getElementById('h-name').value.trim();
-  const impactGarde = document.getElementById('h-impact-garde').checked;
+  const impactEl = document.getElementById('h-impact-garde');
+  const impactGarde = impactEl ? impactEl.checked : true;
   if (!date || !name) { window.toast('⚠ Complétez la date et la désignation'); return; }
   if (state.holidays.some(h => h.date === date)) { window.toast('⚠ Un événement existe déjà à cette date'); return; }
   try { await api.createJourFerie({ date, libelle: name }); await refreshHolidaysFromApi(); }
   catch (error) { window.toast('🛑 Erreur d’enregistrement du jour férié'); return; }
-  document.getElementById('h-date').value = '';
-  document.getElementById('h-name').value = '';
+  
+  closeAddHolidayModal();
   
   if (window.syncLeavesAndHolidaysIntoSchedule) {
     window.syncLeavesAndHolidaysIntoSchedule();
@@ -54,13 +109,10 @@ export async function removeHoliday(date) {
 
 export function renderHolidaysTable() {
   state.holidays.sort((a, b) => new Date(a.date) - new Date(b.date));
-  const formatter = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
   const tbody = document.getElementById('feries-tbody');
   if (tbody) {
     tbody.innerHTML = state.holidays.map(h => {
-      const formattedDate = formatter.format(new Date(h.date + 'T00:00:00')).replace('.', '');
-      const splitted = formattedDate.split(' ');
-      const displayDate = `<span style="color:#0c7c8c; font-weight:700;">${splitted[0]} ${splitted[1]}. ${splitted[2]}</span>`;
+      const displayDate = `<span style="color:#0c7c8c; font-weight:700;">${formatDateDMY(h.date)}</span>`;
       return `<div class="holiday-list-item"><div class="date-lbl">${displayDate}</div><div class="name-lbl">${h.name}</div><button class="holiday-btn-delete" onclick="removeHoliday('${h.date}')">✕</button></div>`;
     }).join('');
   }

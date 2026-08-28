@@ -1,5 +1,5 @@
 import { state, CATS, renderAll } from '../state.js';
-import { dateAdd, fmtShort, dayName, inRange } from '../utils/helpers.js';
+import { dateAdd, fmtShort, dayName, inRange, formatDateDMY } from '../utils/helpers.js';
 import { getHoliday } from './calendar.js';
 import { isOnLeave } from './leaves.js';
 
@@ -80,16 +80,16 @@ function parseDate(dateStr) {
   return new Date(year, month - 1, day);
 }
 
-function formatDate(dateStr, options = { day: '2-digit', month: '2-digit', year: 'numeric' }) {
-  return new Date(dateStr + 'T00:00:00').toLocaleDateString('fr-FR', options);
+function formatDate(dateStr) {
+  return formatDateDMY(dateStr);
 }
 
 function fmtLong(dateStr) {
-  return formatDate(dateStr, { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return formatDateDMY(dateStr);
 }
 
 function formatDateRange(start, end) {
-  return `${fmtLong(start)} — ${fmtLong(end)}`;
+  return `${formatDateDMY(start)} — ${formatDateDMY(end)}`;
 }
 
 function formatIsoDate(dateObj) {

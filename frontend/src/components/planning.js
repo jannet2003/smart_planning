@@ -1,5 +1,5 @@
 import { state, CATS, TASK_CLASSES, TASK_LABELS, getTaskClass, getTaskLabel, renderAll } from '../state.js';
-import { dateAdd, fmtShort, dayName, rangeLen, inRange } from '../utils/helpers.js';
+import { dateAdd, fmtShort, dayName, rangeLen, inRange, formatDateDMY } from '../utils/helpers.js';
 import { getHoliday } from './calendar.js';
 import { isOnLeave, totalLeaveDays, totalFlexLeaveDays } from './leaves.js';
 import * as api from '../api/api.js';
@@ -66,8 +66,7 @@ export function syncLeavesAndHolidaysIntoSchedule() {
 export function updateWeekLabelAutomatically() {
   const startVal = document.getElementById('week-start-date').value;
   if (startVal) {
-    const dateObj = new Date(startVal + 'T00:00:00');
-    document.getElementById('week-name').value = `Semaine du ${dateObj.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+    document.getElementById('week-name').value = `Semaine du ${formatDateDMY(startVal)}`;
   }
 }
 

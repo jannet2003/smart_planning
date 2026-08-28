@@ -208,3 +208,61 @@ def test_feries_and_personnel_filters():
 
     seniors = client.get("/api/personnel?role=SENIOR").json()
     assert any(p["nom"] == "Senior 1" for p in seniors)
+
+
+def test_salle_besoins_integrated_and_eight_tables_total():
+    # 1. Verification qu'il y a exactement 8 tables enregistrées
+    table_names = list(Base.metadata.tables.keys())
+    assert len(table_names) == 8
+    assert "BESOIN_SALLE" not in table_names
+    assert "SALLE" in table_names
+
+    # 2. Verification de la persistance et lecture des besoins directement sur SALLE
+    payload = {
+        "nom": "Salle Test Besoins",
+        "min_senior": 2,
+        "max_senior": 4,
+        "min_resident": 1,
+        "max_resident": 2,
+        "min_inf": 1,
+        "max_inf": 3,
+        "min_tech": 2,
+        "max_tech": 5,
+    }
+    create_res = client.post("/api/salles/", json=payload)
+    assert create_res.status_code == 200
+    data = create_res.json()
+    assert data["nom"] == "Salle Test Besoins"
+    assert data["min_senior"] == 2
+    assert data["max_senior"] == 4
+    assert data["min_resident"] == 1
+    assert data["max_resident"] == 2
+    assert data["min_inf"] == 1
+    assert data["max_inf"] == 3
+    assert data["min_tech"] == 2
+    assert data["max_tech"] == 5
+
+    # 3. Verification en GET
+    salle_id = data["id"]
+    get_res = client.get(f"/api/salles/{salle_id}")
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert get_data["min_senior"] == 2
+    assert get_data["max_senior"] == 4
+    assert get_data["min_resident"] == 1
+    assert get_data["max_resident"] == 2
+    assert get_data["min_inf"] == 1
+    assert get_data["max_inf"] == 3
+    assert get_data["min_tech"] == 2
+    assert get_data["max_tech"] == 5
+
+    # 4. Verification de la mise a jour
+    update_res = client.put(
+        f"/api/salles/{salle_id}",
+        json={"min_senior": 3, "max_senior": 6},
+    )
+    assert update_res.status_code == 200
+    updated_data = update_res.json()
+    assert updated_data["min_senior"] == 3
+    assert updated_data["max_senior"] == 6
+

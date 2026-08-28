@@ -10,10 +10,15 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- Feuille de style -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2.8">
 
   <!-- Librairie XLSX (pour l'import Excel) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <!-- Flatpickr (French Datepicker JJ/MM/AAAA) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/fr.js"></script>
 </head>
 <body>
 
@@ -187,8 +192,7 @@
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; flex-wrap:wrap; gap:12px;">
             <strong style="font-size:14px">Registre des Congés &amp; Cumul d'Absences</strong>
             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-              <button class="btn" type="button" onclick="openFlexLeaveModal()">+ Déposer un congé flexible</button>
-              <button class="btn secondary" type="button" onclick="openSummerBlockModal()">+ Attribuer bloc 30j</button>
+              <button class="btn" type="button" onclick="openLeaveModal()">+ Déposer un congé</button>
             </div>
           </div>
           <div class="table-scroll">
@@ -200,44 +204,44 @@
         </div>
       </section>
 
-      <!-- ===== MODALE CONGÉ FLEXIBLE ===== -->
-      <div class="modal-overlay" id="flex-leave-modal" onclick="closeFlexLeaveModal()">
-        <div class="modal-content" onclick="event.stopPropagation()" style="width: 460px;">
+      <!-- ===== MODALE UNIQUE DE DÉPÔT DE CONGÉ ===== -->
+      <div class="modal-overlay" id="leave-modal" onclick="closeLeaveModal()">
+        <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px;">
           <div class="modal-header">
-            <h3>🌴 Déposer un congé flexible</h3>
-            <button class="modal-close" onclick="closeFlexLeaveModal()">✕</button>
+            <h3>🌴 Déposer un congé</h3>
+            <button class="modal-close" onclick="closeLeaveModal()">✕</button>
           </div>
           <label>Sélectionner l'agent</label>
           <select id="lv-staff" onchange="checkLimitAlert()"></select>
-          <label>Date de Début</label>
-          <input type="date" id="lv-start" onchange="checkLimitAlert()">
-          <label>Date de Fin</label>
-          <input type="date" id="lv-end" onchange="checkLimitAlert()">
+
+          <label>Type de congé</label>
+          <select id="lv-type" onchange="onLeaveTypeChange()">
+            <option value="flexible">Congé Flexible</option>
+            <option value="radiologie">Congé de Radiologie (Bloc 30 jours)</option>
+          </select>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px;">
+            <div>
+              <label style="margin-top: 0;">Date de Début</label>
+              <input type="date" id="lv-start" onchange="onLeaveDateChange()">
+            </div>
+            <div id="lv-end-container">
+              <label style="margin-top: 0;">Date de Fin</label>
+              <input type="date" id="lv-end" onchange="onLeaveDateChange()">
+            </div>
+          </div>
+          <div id="lv-duration-hint" style="display: none; font-size: 11.5px; color: var(--accent-blue-dark); margin-top: 6px; font-weight: 500;">
+            ℹ️ Durée automatique fixe de 30 jours consécutifs.
+          </div>
+
           <div id="reason-block" style="display:none; background:#fee2e2; border: 1px solid #fecaca; border-radius:8px; padding:12px; margin-top:14px;">
             <label style="color:#b91c1c; margin-top:0;">⚠️ Justificatif obligatoire (> 60 jours cumulés)</label>
             <textarea id="lv-reason" placeholder="Veuillez renseigner le motif réglementaire de ce dépassement exceptionnel..." rows="3"></textarea>
           </div>
-          <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button class="btn" style="flex: 1;" onclick="addFlexLeave()">Valider la période</button>
-            <button class="btn secondary" style="flex: 1;" onclick="closeFlexLeaveModal()">Annuler</button>
-          </div>
-        </div>
-      </div>
 
-      <!-- ===== MODALE BLOC FIXE (30 JOURS) ===== -->
-      <div class="modal-overlay" id="summer-block-modal" onclick="closeSummerBlockModal()">
-        <div class="modal-content" onclick="event.stopPropagation()" style="width: 440px;">
-          <div class="modal-header">
-            <h3>🏖️ Bloc Fixe Obligatoire (30 jours)</h3>
-            <button class="modal-close" onclick="closeSummerBlockModal()">✕</button>
-          </div>
-          <label>Sélectionner l'agent</label>
-          <select id="sb-staff"></select>
-          <label>Date de Début du Bloc</label>
-          <input type="date" id="sb-start">
           <div style="display: flex; gap: 10px; margin-top: 20px;">
-            <button class="btn" style="flex: 1;" onclick="assignSummerBlock()">Attribuer les 30j</button>
-            <button class="btn secondary" style="flex: 1;" onclick="closeSummerBlockModal()">Annuler</button>
+            <button class="btn" style="flex: 1;" type="button" onclick="submitLeave()">Valider le congé</button>
+            <button class="btn secondary" style="flex: 1;" type="button" onclick="closeLeaveModal()">Annuler</button>
           </div>
         </div>
       </div>
@@ -348,35 +352,52 @@
     <div class="section-title">Gestion des Jours Fériés <span class="hint">— Saisie de dates bloquées pour le service</span></div>
 
     <div class="grid-calendar-layout">
-      <div class="calendar-card">
-        <div class="calendar-header">
-          <div class="calendar-title" id="calendar-month-year">Janvier 2026</div>
-          <div style="display: flex; gap: 6px;">
-            <button class="calendar-nav-btn" onclick="navigateCalendar(-1)">◀</button>
-            <button class="calendar-nav-btn" onclick="navigateCalendar(1)">▶</button>
+      <div style="display: flex; flex-direction: column; gap: 14px;">
+        <div class="calendar-card">
+          <div class="calendar-header">
+            <div class="calendar-title" id="calendar-month-year">Janvier 2026</div>
+            <div style="display: flex; gap: 6px;">
+              <button class="calendar-nav-btn" onclick="navigateCalendar(-1)">◀</button>
+              <button class="calendar-nav-btn" onclick="navigateCalendar(1)">▶</button>
+            </div>
           </div>
+          <div class="calendar-weekdays">
+            <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
+          </div>
+          <div class="calendar-grid-days" id="calendar-days-container"></div>
+          <div class="calendar-hint">💡 Cliquez directement sur un jour pour l'activer ou le désactiver comme jour férié.</div>
         </div>
-        <div class="calendar-weekdays">
-          <div>Lun</div><div>Mar</div><div>Mer</div><div>Jeu</div><div>Ven</div><div>Sam</div><div>Dim</div>
-        </div>
-        <div class="calendar-grid-days" id="calendar-days-container"></div>
-        <div class="calendar-hint">💡 Cliquez directement sur un jour pour l'activer ou le désactiver comme jour férié.</div>
+        <button class="btn block" type="button" style="background-color: #0c7c8c; font-weight: 700; height: 42px; display: flex; align-items: center; justify-content: center; gap: 8px;" onclick="openAddHolidayModal()">
+          ➕ Ajouter un jour férié
+        </button>
       </div>
       <div class="panel">
-        <strong style="font-size:15px; font-family: var(--sans); color: var(--text);">Ajouter un jour férié manuellement</strong>
-        <label style="margin-top: 20px;">DATE DU JOUR FÉRIÉ</label>
-        <input type="date" id="h-date" onchange="syncCalendarWithInputDate(this.value)">
-        <label>NOM / LIBELLÉ DU JOUR FÉRIÉ</label>
-        <input type="text" id="h-name" placeholder="Ex: Fête de la République">
-        <input type="checkbox" id="h-impact-garde" checked style="display: none;">
-        <button class="btn block" style="margin-top:20px; background-color: #0c7c8c; font-weight: 700; height: 46px;" onclick="addHoliday()">+ Enregistrer la date</button>
-        <div style="margin-top: 30px; border-top: 1px solid var(--border-soft); padding-top: 20px;">
-          <strong style="font-size:13px; font-family: var(--sans); color: var(--text);">Dates enregistrées (<span id="count-feries">0</span>)</strong>
-          <div class="holiday-list-container" id="feries-tbody"></div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <strong style="font-size:15px; font-family: var(--sans); color: var(--text);">Dates enregistrées (<span id="count-feries">0</span>)</strong>
         </div>
+        <div class="holiday-list-container" id="feries-tbody" style="max-height: 480px;"></div>
       </div>
     </div>
   </section>
+
+  <!-- MODALE AJOUT JOUR FÉRIÉ -->
+  <div class="modal-overlay" id="add-holiday-modal" onclick="closeAddHolidayModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px;">
+      <div class="modal-header">
+        <h3>Ajouter un jour férié manuellement</h3>
+        <button class="modal-close" onclick="closeAddHolidayModal()">✕</button>
+      </div>
+      <label style="margin-top: 15px;">DATE DU JOUR FÉRIÉ</label>
+      <input type="date" id="h-date" onchange="syncCalendarWithInputDate(this.value)">
+      <label style="margin-top: 15px;">NOM / LIBELLÉ DU JOUR FÉRIÉ</label>
+      <input type="text" id="h-name" placeholder="Ex: Fête de la République">
+      <input type="checkbox" id="h-impact-garde" checked style="display: none;">
+      <div style="display: flex; gap: 10px; margin-top: 25px;">
+        <button class="btn" style="flex: 1; background-color: #0c7c8c; font-weight: 700; height: 44px;" type="button" onclick="addHoliday()">+ Enregistrer la date</button>
+        <button class="btn secondary" style="flex: 1; height: 44px;" type="button" onclick="closeAddHolidayModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ============================================================ -->
   <!-- TAB 3 : CONFIGURATIONS SALLES -->
@@ -630,7 +651,7 @@
   <div class="toast" id="toast"></div>
 
   <!-- ===== SCRIPT PRINCIPAL (Initialisateur d'application modulaire) ===== -->
-  <script type="module" src="/src/app.js"></script>
+  <script type="module" src="/src/app.js?v=2.9"></script>
 
 </body>
 </html>

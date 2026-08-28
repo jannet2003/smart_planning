@@ -1,5 +1,6 @@
 import { state, renderAll } from '../state.js';
 import * as api from '../api/api.js';
+import { formatDateDMY } from '../utils/helpers.js';
 
 let currentEditingCompatRoomIdx = null;
 let currentEditingUnavailRoomIdx = null;
@@ -225,22 +226,45 @@ export function openUnavailabilityModal(idx) {
   currentEditingUnavailRoomIdx = idx;
   const room = state.rooms[idx];
 
-  const titleEl = document.getElementById('unavail-modal-title');
-  if (titleEl) titleEl.textContent = `🛠️ Indisponibilité — ${room.name}`;
+  const titleEl = document.getElementById('unavail-modal-room-name') || document.getElementById('unavail-modal-title');
+  if (titleEl) titleEl.textContent = `🛠️ Indisponibilité — ${room.name || room.nom || ''}`;
 
   const isBrokenCb = document.getElementById('unavail-is-broken');
   if (isBrokenCb) isBrokenCb.checked = !!room.isBroken;
 
   const startInput = document.getElementById('unavail-start');
-  if (startInput) startInput.value = room.brokenStart || '';
+  if (startInput) {
+    if (startInput._flatpickr) startInput._flatpickr.setDate(room.brokenStart || '', true);
+    else startInput.value = room.brokenStart || '';
+  }
 
   const endInput = document.getElementById('unavail-end');
-  if (endInput) endInput.value = room.brokenEnd || '';
+  if (endInput) {
+    if (endInput._flatpickr) endInput._flatpickr.setDate(room.brokenEnd || '', true);
+    else endInput.value = room.brokenEnd || '';
+  }
 
   const reasonInput = document.getElementById('unavail-reason');
   if (reasonInput) reasonInput.value = room.brokenReason || '';
 
-  const modal = document.getElementById('room-unavailability-modal');
+  const histList = document.getElementById('unavail-history-list');
+  if (histList) {
+    if (room.isBroken || (room.brokenStart && room.brokenEnd)) {
+      histList.innerHTML = `
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 10px; font-size: 12px; color: #991b1b; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <strong>Du ${formatDateDMY(room.brokenStart) || '?'} au ${formatDateDMY(room.brokenEnd) || '?'}</strong>
+            <div style="color: #7f1d1d; margin-top: 2px;">${room.brokenReason || 'Aucun motif spécifié'}</div>
+          </div>
+          <button type="button" class="btn danger" style="padding: 4px 8px; font-size: 11px;" onclick="clearUnavailability(${idx}); closeUnavailabilityModal();">Supprimer</button>
+        </div>
+      `;
+    } else {
+      histList.innerHTML = `<div style="font-size: 12px; color: var(--text-dim); font-style: italic;">Aucune indisponibilité en cours pour cette salle.</div>`;
+    }
+  }
+
+  const modal = document.getElementById('room-unavail-modal') || document.getElementById('room-unavailability-modal');
   if (modal) {
     modal.classList.add('active');
     modal.style.display = 'flex';
@@ -248,7 +272,7 @@ export function openUnavailabilityModal(idx) {
 }
 
 export function closeUnavailabilityModal() {
-  const modal = document.getElementById('room-unavailability-modal');
+  const modal = document.getElementById('room-unavail-modal') || document.getElementById('room-unavailability-modal');
   if (modal) {
     modal.classList.remove('active');
     modal.style.display = 'none';
@@ -407,7 +431,7 @@ export function renderRooms() {
       `;
     } else {
       const datesStr = (room.brokenStart || room.brokenEnd)
-        ? `${room.brokenStart ? room.brokenStart.substring(5) : ''} → ${room.brokenEnd ? room.brokenEnd.substring(5) : ''}`
+        ? `${room.brokenStart ? formatDateDMY(room.brokenStart) : ''} → ${room.brokenEnd ? formatDateDMY(room.brokenEnd) : ''}`
         : 'Panne active';
       unavailHtml = `
         <div class="unavail-badge">

@@ -1791,3 +1791,41 @@ tbody tr:hover td {
     margin: 14mm;
   }
 }
+
+/* Flatpickr French Date Picker */
+.flatpickr-calendar {
+  background: #ffffff !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+  font-family: var(--sans) !important;
+  z-index: 999999 !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.startRange,
+.flatpickr-day.endRange {
+  background: #0c7c8c !important;
+  border-color: #0c7c8c !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.flatpickr-day:hover {
+  background: var(--panel-3) !important;
+}
+
+.flatpickr-day.today {
+  border-color: #0c7c8c !important;
+}
+
+.flatpickr-input[readonly] {
+  cursor: pointer;
+  background-color: #ffffff;
+}
+
+.flatpickr-input[readonly]:disabled,
+.flatpickr-input.flatpickr-disabled {
+  background-color: #f1f5f9 !important;
+  cursor: not-allowed !important;
+}

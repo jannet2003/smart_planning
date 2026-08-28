@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import date
 
 from app.db.database import get_db
-from app.models.salle import Salle, BesoinSalle, CompatibiliteSenior, IndisponibiliteSalle
+from app.models.salle import Salle, CompatibiliteSenior, IndisponibiliteSalle
 from app.schemas.salle import SalleCreate, SalleUpdate, SalleResponse
 
 router = APIRouter()
@@ -18,7 +18,6 @@ def _payload_from_model(data):
 
 
 def _normalize_salle_payload(item: Salle):
-    besoins = {besoin.categorie: besoin for besoin in item.besoins}
     indisponibilite = item.indisponibilites[0] if item.indisponibilites else None
     return {
         "id": item.id,
@@ -27,14 +26,14 @@ def _normalize_salle_payload(item: Salle):
         "actif": True,
         "mode_affectation_senior": item.mode_affectation_senior,
         "senior_mode": item.mode_affectation_senior,
-        "min_senior": besoins.get("senior").minimum if "senior" in besoins else 0,
-        "max_senior": besoins.get("senior").maximum if "senior" in besoins else 0,
-        "min_resident": besoins.get("resident").minimum if "resident" in besoins else 0,
-        "max_resident": besoins.get("resident").maximum if "resident" in besoins else 0,
-        "min_inf": besoins.get("infirmier").minimum if "infirmier" in besoins else 0,
-        "max_inf": besoins.get("infirmier").maximum if "infirmier" in besoins else 0,
-        "min_tech": besoins.get("technicien").minimum if "technicien" in besoins else 0,
-        "max_tech": besoins.get("technicien").maximum if "technicien" in besoins else 0,
+        "min_senior": item.min_senior if item.min_senior is not None else 0,
+        "max_senior": item.max_senior if item.max_senior is not None else 0,
+        "min_resident": item.min_resident if item.min_resident is not None else 0,
+        "max_resident": item.max_resident if item.max_resident is not None else 0,
+        "min_inf": item.min_inf if item.min_inf is not None else 0,
+        "max_inf": item.max_inf if item.max_inf is not None else 0,
+        "min_tech": item.min_tech if item.min_tech is not None else 0,
+        "max_tech": item.max_tech if item.max_tech is not None else 0,
         "senior_compatible_rooms": item.senior_compatible_rooms,
         "is_broken": indisponibilite is not None,
         "broken_start": str(indisponibilite.date_debut) if indisponibilite else "",
@@ -44,23 +43,29 @@ def _normalize_salle_payload(item: Salle):
 
 
 def _sync_salle_details(item: Salle, payload, db: Session):
-    mapping = {
-        "senior": ("min_senior", "max_senior"),
-        "resident": ("min_resident", "max_resident"),
-        "infirmier": ("min_inf", "max_inf"),
-        "technicien": ("min_tech", "max_tech"),
-    }
-    for categorie, (min_key, max_key) in mapping.items():
-        besoin = next((b for b in item.besoins if b.categorie == categorie), None)
-        if besoin is None:
-            besoin = BesoinSalle(salle_id=item.id, categorie=categorie)
-            db.add(besoin)
-        besoin.minimum = int(payload.get(min_key, besoin.minimum or 0) or 0)
-        besoin.maximum = int(payload.get(max_key, besoin.maximum or 0) or 0)
+    for key in [
+        "min_senior",
+        "max_senior",
+        "min_resident",
+        "max_resident",
+        "min_inf",
+        "max_inf",
+        "min_tech",
+        "max_tech",
+    ]:
+        if key in payload and payload[key] is not None:
+            setattr(item, key, int(payload[key]))
     for indisponibilite in list(item.indisponibilites):
         db.delete(indisponibilite)
     if payload.get("is_broken") and payload.get("broken_start") and payload.get("broken_end"):
-        db.add(IndisponibiliteSalle(salle_id=item.id, date_debut=date.fromisoformat(payload["broken_start"]), date_fin=date.fromisoformat(payload["broken_end"]), raison=payload.get("broken_reason") or None))
+        db.add(
+            IndisponibiliteSalle(
+                salle_id=item.id,
+                date_debut=date.fromisoformat(payload["broken_start"]),
+                date_fin=date.fromisoformat(payload["broken_end"]),
+                raison=payload.get("broken_reason") or None,
+            )
+        )
 
 
 def _sync_salle_compatibility(item: Salle, senior_mode: str, compatible_rooms_raw: Optional[str], db: Session):

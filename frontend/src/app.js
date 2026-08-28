@@ -1,5 +1,6 @@
 import { state, registerListener, renderAll } from './state.js';
 import * as api from './api/api.js';
+import { formatDateDMY } from './utils/helpers.js';
 import { initStaff, renderStaffTable, populateStaffSelects } from './components/staff.js';
 import { initRooms, renderRooms, apiRoomToLocal } from './components/rooms.js';
 import { initLeaves, renderLeaveTable, totalLeaveDays, isOnLeave } from './components/leaves.js';
@@ -236,10 +237,8 @@ async function seedAndLoadData() {
           }
         });
         const key = `${mondayStr}_DB`;
-        const mondayDate = new Date(mondayStr + 'T00:00:00');
-        const formattedLabel = mondayDate.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
         state.archives[key] = {
-          name: `Semaine du ${formattedLabel}`,
+          name: `Semaine du ${formatDateDMY(mondayStr)}`,
           start: mondayStr,
           schedule: { datesList, gridAssignments, nightAssignments, additionalSeniorAssignments }
         };
@@ -261,6 +260,101 @@ async function seedAndLoadData() {
   }
 }
 
+// ---------- Initialisation des DatePickers (Flatpickr JJ/MM/AAAA) ----------
+export function initDatePickers() {
+  if (typeof flatpickr !== 'undefined') {
+    flatpickr.localize(flatpickr.l10ns.fr);
+    document.querySelectorAll("input[type='date']").forEach(input => {
+      if (!input._flatpickr) {
+        flatpickr(input, {
+          locale: "fr",
+          dateFormat: "Y-m-d",
+          altInput: true,
+          altFormat: "d/m/Y",
+          allowInput: true,
+          parseDate: (datestr, format) => {
+            if (typeof datestr === 'string') {
+              const clean = datestr.trim();
+              const dmy = clean.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})$/);
+              if (dmy) {
+                let yr = parseInt(dmy[3]);
+                if (yr < 100) yr += 2000;
+                return new Date(yr, parseInt(dmy[2]) - 1, parseInt(dmy[1]));
+              }
+            }
+            return flatpickr.parseDate(datestr, format);
+          },
+          onReady: function(selectedDates, dateStr, instance) {
+            if (instance.altInput) {
+              instance.altInput.placeholder = "JJ/MM/AAAA";
+              instance.altInput.setAttribute('autocomplete', 'off');
+
+              // Gestion de la saisie manuelle fluide JJ/MM/AAAA
+              instance.altInput.addEventListener('input', function(e) {
+                let val = e.target.value;
+                // Auto-insertion des slashs lors de la frappe
+                if (e.inputType !== 'deleteContentBackward' && e.inputType !== 'deleteContentForward') {
+                  if (/^\d{2}$/.test(val)) {
+                    val = val + '/';
+                    e.target.value = val;
+                  } else if (/^\d{2}\/\d{2}$/.test(val)) {
+                    val = val + '/';
+                    e.target.value = val;
+                  }
+                }
+
+                const match = val.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (match) {
+                  const day = match[1].padStart(2, '0');
+                  const month = match[2].padStart(2, '0');
+                  const year = match[3];
+                  const dObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                  if (!isNaN(dObj.getTime()) && dObj.getMonth() === parseInt(month) - 1) {
+                    const iso = `${year}-${month}-${day}`;
+                    input.value = iso;
+                    instance.setDate(dObj, false);
+                    input.dispatchEvent(new Event('change', { bubbles: true }));
+                  }
+                }
+              });
+
+              instance.altInput.addEventListener('blur', function(e) {
+                const val = e.target.value.trim();
+                if (!val) {
+                  input.value = '';
+                  instance.clear();
+                  input.dispatchEvent(new Event('change', { bubbles: true }));
+                } else {
+                  const match = val.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2,4})$/);
+                  if (match) {
+                    const day = match[1].padStart(2, '0');
+                    const month = match[2].padStart(2, '0');
+                    let year = match[3];
+                    if (year.length === 2) year = '20' + year;
+                    const dObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                    if (!isNaN(dObj.getTime())) {
+                      const iso = `${year}-${month}-${day}`;
+                      input.value = iso;
+                      instance.setDate(dObj, false);
+                      e.target.value = `${day}/${month}/${year}`;
+                      input.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                  }
+                }
+              });
+            }
+          },
+          onChange: function(selectedDates, dateStr) {
+            input.value = dateStr;
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        });
+      }
+    });
+  }
+}
+window.initDatePickers = initDatePickers;
+
 // ---------- Enregistrement du Dispatcher de Rendu ----------
 registerListener(() => {
   window.updateHeaderStats();
@@ -271,9 +365,11 @@ registerListener(() => {
   renderRooms();
   renderRestitution();
   renderExtDutyTab();
+  initDatePickers();
 });
 
 // ---------- Démarrage de l'Application ----------
 document.addEventListener('DOMContentLoaded', () => {
   seedAndLoadData();
+  setTimeout(initDatePickers, 100);
 });
