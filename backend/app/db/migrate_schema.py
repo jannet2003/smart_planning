@@ -97,17 +97,49 @@ def check_and_migrate_database(db_path: pathlib.Path):
         );
     """)
 
-    # 4. Table INDISPONIBILITE_SALLE
+    # 4. Table INDISPONIBILITE_SALLE (avec id PK, type_indisponibilite)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS INDISPONIBILITE_SALLE (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             salle_id INTEGER NOT NULL,
             date_debut DATE NOT NULL,
             date_fin DATE NOT NULL,
             raison VARCHAR,
-            PRIMARY KEY (salle_id, date_debut),
+            type_indisponibilite VARCHAR DEFAULT 'maintenance',
+            UNIQUE (salle_id, date_debut),
             FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
         );
     """)
+
+    # Migration : si la table existe sans la colonne id en PK ou sans type_indisponibilite
+    cur.execute("PRAGMA table_info(INDISPONIBILITE_SALLE);")
+    indispo_cols = {c[1]: c for c in cur.fetchall()}
+    if "id" not in indispo_cols:
+        print("Migration INDISPONIBILITE_SALLE : ajout de id PK autoincrement...")
+        cur.execute("SELECT salle_id, date_debut, date_fin, raison FROM INDISPONIBILITE_SALLE;")
+        old_rows = cur.fetchall()
+        cur.execute("DROP TABLE INDISPONIBILITE_SALLE;")
+        cur.execute("""
+            CREATE TABLE INDISPONIBILITE_SALLE (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                salle_id INTEGER NOT NULL,
+                date_debut DATE NOT NULL,
+                date_fin DATE NOT NULL,
+                raison VARCHAR,
+                type_indisponibilite VARCHAR DEFAULT 'maintenance',
+                UNIQUE (salle_id, date_debut),
+                FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
+            );
+        """)
+        for row in old_rows:
+            cur.execute(
+                "INSERT INTO INDISPONIBILITE_SALLE (salle_id, date_debut, date_fin, raison) VALUES (?, ?, ?, ?);",
+                row
+            )
+        print(f"  {len(old_rows)} enregistrements migrés.")
+    elif "type_indisponibilite" not in indispo_cols:
+        cur.execute("ALTER TABLE INDISPONIBILITE_SALLE ADD COLUMN type_indisponibilite VARCHAR DEFAULT 'maintenance';")
+        print("Colonne type_indisponibilite ajoutée à INDISPONIBILITE_SALLE.")
 
     # 5. Table CONGE
     cur.execute("""
@@ -150,6 +182,19 @@ def check_and_migrate_database(db_path: pathlib.Path):
             periode VARCHAR NOT NULL,
             PRIMARY KEY (personnel_id, date, periode),
             FOREIGN KEY (personnel_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE,
+            FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
+        );
+    """)
+
+    # 9. Table VOEU
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS VOEU (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id INTEGER NOT NULL,
+            jour DATE NOT NULL,
+            type VARCHAR NOT NULL,
+            salle_id INTEGER,
+            FOREIGN KEY (agent_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE,
             FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
         );
     """)

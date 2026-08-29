@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Optional, List
 
 
 class SalleBase(BaseModel):
@@ -34,18 +34,13 @@ class SalleUpdate(SalleBase):
     pass
 
 
-class SalleResponse(SalleBase):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
 class IndisponibiliteSalleBase(BaseModel):
     salle_id: int
     date_debut: str
     date_fin: str
     raison: Optional[str] = None
     motif: Optional[str] = None
+    type_indisponibilite: Optional[str] = 'maintenance'
 
 
 class IndisponibiliteSalleCreate(IndisponibiliteSalleBase):
@@ -57,7 +52,17 @@ class IndisponibiliteSalleUpdate(BaseModel):
     date_fin: Optional[str] = None
     raison: Optional[str] = None
     motif: Optional[str] = None
+    type_indisponibilite: Optional[str] = None
 
 
 class IndisponibiliteSalleResponse(IndisponibiliteSalleBase):
+    id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SalleResponse(SalleBase):
+    id: int
+    indisponibilites: List[IndisponibiliteSalleResponse] = []
+
     model_config = ConfigDict(from_attributes=True)

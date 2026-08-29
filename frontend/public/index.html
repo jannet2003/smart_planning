@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- Feuille de style -->
-  <link rel="stylesheet" href="css/style.css?v=2.8">
+  <link rel="stylesheet" href="css/style.css?v=3.0">
 
   <!-- Librairie XLSX (pour l'import Excel) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -403,40 +403,113 @@
   <!-- TAB 3 : CONFIGURATIONS SALLES -->
   <!-- ============================================================ -->
   <section class="tabpanel" id="tab3">
-    <div class="section-title">Paramétrage &amp; Capacités des Salles d'Examen <span class="hint">— Seuils d'alerte et gestion fine du personnel par modalité</span></div>
-    <div class="panel" style="padding: 16px;">
-      <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-        <strong style="font-size: 14px;">Tableau Synthetique des Salles d'Examen</strong>
-        <button class="btn" type="button" style="background-color: #0c7c8c;" onclick="openAddRoomModal()">➕ Ajouter une salle d'examen</button>
+    <div class="rooms-layout">
+
+      <!-- ── SIDEBAR VERTICALE ── -->
+      <aside class="rooms-sidebar">
+        <div class="rooms-sidebar-label">Configurations Salles</div>
+        <nav class="rooms-sidebar-menu">
+          <button class="rooms-subnav-btn active" data-section="capacites" onclick="switchRoomsSubSection('capacites')">
+            <span class="subnav-btn-icon">⚙️</span>
+            <span class="subnav-btn-text">Paramétrage &amp; capacités</span>
+          </button>
+          <button class="rooms-subnav-btn" data-section="indisponibilites" onclick="switchRoomsSubSection('indisponibilites')">
+            <span class="subnav-btn-icon">🛠</span>
+            <span class="subnav-btn-text">Indisponibilité et maintenance</span>
+          </button>
+        </nav>
+      </aside>
+
+      <!-- ── ZONE DE CONTENU ── -->
+      <div class="rooms-content">
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- SECTION 1 : Paramétrage & capacités                 -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <div id="rooms-section-capacites" class="rooms-subsection rooms-subsection-active">
+          <div class="section-title" style="margin-bottom:16px;">
+            Paramétrage &amp; capacités des salles d'examen
+            <span class="hint">— Seuils d'alerte et gestion fine du personnel par modalité</span>
+          </div>
+          <div class="panel" style="padding: 16px;">
+            <div style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+              <strong style="font-size: 14px;">Tableau synthétique des salles d'examen</strong>
+              <button class="btn" type="button" style="background-color: #0c7c8c;" onclick="openAddRoomModal()">➕ Ajouter une salle d'examen</button>
+            </div>
+            <div class="table-scroll rooms-table-wrapper">
+              <table class="rooms-table" id="rooms-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2" class="sticky-col">Salle</th>
+                    <th colspan="2" class="group-header">Seniors</th>
+                    <th colspan="2" class="group-header">Résidents</th>
+                    <th colspan="2" class="group-header">Infirmiers</th>
+                    <th colspan="2" class="group-header">Techniciens</th>
+                    <th rowspan="2">Affectation Seniors</th>
+                    <th rowspan="2" style="width: 80px; text-align: center;">Actions</th>
+                  </tr>
+                  <tr>
+                    <th class="sub-header">Min</th>
+                    <th class="sub-header">Max</th>
+                    <th class="sub-header">Min</th>
+                    <th class="sub-header">Max</th>
+                    <th class="sub-header">Min</th>
+                    <th class="sub-header">Max</th>
+                    <th class="sub-header">Min</th>
+                    <th class="sub-header">Max</th>
+                  </tr>
+                </thead>
+                <tbody id="rooms-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- SECTION 2 : Indisponibilité et maintenance          -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <div id="rooms-section-indisponibilites" class="rooms-subsection">
+          <div class="section-title" style="margin-bottom:16px;">
+            Indisponibilité et maintenance
+            <span class="hint">— Suivi des périodes de fermeture, panne et maintenance par salle</span>
+          </div>
+          <div class="panel" style="padding: 16px;">
+            <div class="table-scroll">
+              <table class="rooms-unavail-table" id="unavail-rooms-table">
+                <thead>
+                  <tr>
+                    <th style="width: 220px;">Salle</th>
+                    <th>Statut / Indisponibilité</th>
+                    <th style="width: 160px; text-align: center;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="unavail-rooms-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /.rooms-content -->
+    </div><!-- /.rooms-layout -->
+
+    <!-- ── DRAWER OVERLAY ── -->
+    <div id="unavail-drawer-overlay" class="unavail-drawer-overlay" onclick="closeUnavailDrawer()"></div>
+
+    <!-- ── DRAWER PANEL ── -->
+    <aside id="unavail-drawer" class="unavail-drawer" role="complementary" aria-label="Détail indisponibilités">
+      <div class="unavail-drawer-header">
+        <h3 id="unavail-drawer-title" class="unavail-drawer-title">Indisponibilités</h3>
+        <button class="unavail-drawer-close" onclick="closeUnavailDrawer()" title="Fermer" aria-label="Fermer le panneau">✕</button>
       </div>
-      <div class="table-scroll rooms-table-wrapper">
-        <table class="rooms-table" id="rooms-table">
-          <thead>
-            <tr>
-              <th rowspan="2" class="sticky-col">Salle</th>
-              <th colspan="2" class="group-header">Seniors</th>
-              <th colspan="2" class="group-header">Résidents</th>
-              <th colspan="2" class="group-header">Infirmiers</th>
-              <th colspan="2" class="group-header">Techniciens</th>
-              <th rowspan="2">Affectation Seniors</th>
-              <th rowspan="2">Indisponibilité</th>
-              <th rowspan="2" style="width: 80px; text-align: center;">Actions</th>
-            </tr>
-            <tr>
-              <th class="sub-header">Min</th>
-              <th class="sub-header">Max</th>
-              <th class="sub-header">Min</th>
-              <th class="sub-header">Max</th>
-              <th class="sub-header">Min</th>
-              <th class="sub-header">Max</th>
-              <th class="sub-header">Min</th>
-              <th class="sub-header">Max</th>
-            </tr>
-          </thead>
-          <tbody id="rooms-tbody"></tbody>
-        </table>
+      <div class="unavail-drawer-add-row">
+        <button class="btn" style="background-color:#0c7c8c; font-size:13px;" type="button"
+          onclick="openAddUnavailModal(window._drawerRoomIdx ?? 0)">
+          ➕ Ajouter une période
+        </button>
       </div>
-    </div>
+      <div id="unavail-drawer-list" class="unavail-drawer-list"></div>
+    </aside>
+
   </section>
 
   <!-- MODALE AJOUT SALLE -->
@@ -489,34 +562,39 @@
     </div>
   </div>
 
-  <!-- MODALE CONFIGURER INDISPONIBILITÉ (PANNE / MAINTENANCE) -->
-  <div class="modal-overlay" id="room-unavail-modal" onclick="closeUnavailabilityModal()">
-    <div class="modal-content" onclick="event.stopPropagation()" style="width: 480px; max-height: 85vh; overflow-y: auto;">
+  <!-- MODALE AJOUT / ÉDITION INDISPONIBILITÉ -->
+  <div class="modal-overlay" id="room-unavail-modal" onclick="closeUnavailModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 460px; max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
-        <h3 id="unavail-modal-room-name">🛠️ Indisponibilités & Maintenance</h3>
-        <button class="modal-close" onclick="closeUnavailabilityModal()">✕</button>
+        <h3 id="unavail-modal-room-name">🛠️ Indisponibilité</h3>
+        <button class="modal-close" onclick="closeUnavailModal()">✕</button>
       </div>
 
-      <div style="margin-bottom: 16px;">
-        <h4 style="font-size: 13px; color: var(--accent-blue-dark); margin: 0 0 8px;">Historique des périodes</h4>
-        <div id="unavail-history-list" style="max-height: 180px; overflow-y: auto;"></div>
-      </div>
+      <div style="background: var(--panel-2); padding: 14px; border-radius: 8px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 14px;">
 
-      <div style="background: var(--panel-2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
-        <h4 style="font-size: 13px; margin: 0 0 10px; color: var(--text);">➕ Ajouter une nouvelle période</h4>
-        <label>Date de début</label>
-        <input type="date" id="unavail-start">
-        <label>Date de fin</label>
-        <input type="date" id="unavail-end">
-        <label>Motif de l'indisponibilité</label>
-        <input type="text" id="unavail-reason" placeholder="Ex: Maintenance annuelle, Panne tube RX...">
-        <div style="display: flex; gap: 10px; margin-top: 14px;">
-          <button class="btn danger" style="flex: 1;" type="button" onclick="saveUnavailabilityModal()">Ajouter la période</button>
+        <!-- Dates -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+          <div>
+            <label style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);">Date de début <span style="color:var(--red);">*</span></label>
+            <input type="date" id="unavail-start" style="margin-top:4px;">
+          </div>
+          <div>
+            <label style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);">Date de fin <span style="font-weight:400; font-size:11px; color:var(--text-faint);">(optionnelle)</span></label>
+            <input type="date" id="unavail-end" style="margin-top:4px;">
+          </div>
         </div>
+
+        <!-- Raison (obligatoire) -->
+        <div>
+          <label style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);">Raison <span style="color:var(--red);">*</span> <span style="font-weight:400; font-size:11px; color:var(--text-faint);">— texte libre</span></label>
+          <input type="text" id="unavail-reason" placeholder="Ex: Détecteur défectueux, pièce commandée…" style="margin-top:4px;">
+        </div>
+
       </div>
 
-      <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
-        <button class="btn secondary" type="button" onclick="closeUnavailabilityModal()">Fermer</button>
+      <div style="display: flex; gap: 10px; margin-top: 18px;">
+        <button class="btn" style="flex: 1; background-color:#0c7c8c;" type="button" onclick="saveUnavailModal()">Enregistrer la période</button>
+        <button class="btn secondary" style="flex: 1;" type="button" onclick="closeUnavailModal()">Annuler</button>
       </div>
     </div>
   </div>
@@ -647,11 +725,47 @@
     </div>
   </div>
 
+  <!-- ===== MODALE SAISIE DE VŒU (PLANNING) ===== -->
+  <div class="modal-overlay" id="wish-modal" onclick="closeWishModal()">
+    <div class="modal-content" onclick="event.stopPropagation()" style="width: 440px; max-height: 90vh; overflow-y: auto;">
+      <div class="modal-header">
+        <h3 id="wish-modal-title">⭐ Vœu pour l'agent</h3>
+        <button class="modal-close" onclick="closeWishModal()">✕</button>
+      </div>
+
+      <div style="background: var(--panel-2); padding: 14px; border-radius: 8px; border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px;">
+        <input type="hidden" id="wish-agent-mat">
+        <input type="hidden" id="wish-date">
+
+        <div>
+          <label style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);">Type de vœu</label>
+          <select id="wish-type" onchange="onWishTypeChange()" style="width:100%; margin-top:4px;">
+            <option value="souhaite">⭐ Souhaite (affectation prioritaire à une salle)</option>
+            <option value="indisponible">⛔ Indisponible (souhaite ne pas travailler ce jour)</option>
+          </select>
+        </div>
+
+        <div id="wish-room-container">
+          <label style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim);">Salle ou Tâche souhaitée</label>
+          <select id="wish-room-select" style="width:100%; margin-top:4px;">
+            <!-- Rempli dynamiquement -->
+          </select>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap;">
+        <button class="btn" style="flex: 1; background-color:#0c7c8c;" type="button" onclick="saveWishModal()">Enregistrer le vœu</button>
+        <button class="btn danger" id="wish-delete-btn" style="display:none; padding:8px 14px;" type="button" onclick="deleteWishModal()">Supprimer</button>
+        <button class="btn secondary" style="flex: 1;" type="button" onclick="closeWishModal()">Annuler</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== TOAST ===== -->
   <div class="toast" id="toast"></div>
 
   <!-- ===== SCRIPT PRINCIPAL (Initialisateur d'application modulaire) ===== -->
-  <script type="module" src="/src/app.js?v=2.9"></script>
+  <script type="module" src="/src/app.js?v=3.2"></script>
 
 </body>
 </html>

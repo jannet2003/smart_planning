@@ -1,4 +1,15 @@
-const BASE_URL = '/api';
+// Détermination dynamique de l'URL de base de l'API
+const BASE_URL = (() => {
+  if (typeof window === 'undefined') return 'http://localhost:8000/api';
+  
+  // Si servi par FastAPI directement (ex: http://localhost:8000 ou 8011), utiliser le chemin relatif /api
+  if (window.location.protocol.startsWith('http') && window.location.port && window.location.port !== '5500' && window.location.port !== '5501') {
+    return '/api';
+  }
+  
+  // Si ouvert via Live Server (port 5500) ou fichier local, pointer vers le port 8000 de debug (ou 8011 si spécifié)
+  return window.location.port === '8011' ? 'http://localhost:8011/api' : 'http://localhost:8000/api';
+})();
 
 export async function fetchPersonnel() {
   const res = await fetch(`${BASE_URL}/personnel/`);
@@ -80,6 +91,50 @@ export async function deleteSalle(id) {
   return res.json();
 }
 
+export async function fetchIndisponibilites(salleId = null) {
+  const url = salleId
+    ? `${BASE_URL}/indisponibilites/?salle_id=${salleId}`
+    : `${BASE_URL}/indisponibilites/`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Erreur de récupération des indisponibilités");
+  return res.json();
+}
+
+export async function createIndisponibilite(data) {
+  const res = await fetch(`${BASE_URL}/indisponibilites/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    let message = "Erreur lors de la création de l'indisponibilité";
+    try { const err = await res.json(); message = err.detail || message; } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function updateIndisponibilite(id, data) {
+  const res = await fetch(`${BASE_URL}/indisponibilites/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    let message = "Erreur lors de la mise à jour de l'indisponibilité";
+    try { const err = await res.json(); message = err.detail || message; } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function deleteIndisponibilite(id) {
+  const res = await fetch(`${BASE_URL}/indisponibilites/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error("Erreur de suppression de l'indisponibilité");
+}
+
 export async function fetchConges() {
   const res = await fetch(`${BASE_URL}/conges`);
   if (!res.ok) throw new Error("Erreur de récupération des congés");
@@ -136,3 +191,80 @@ export async function savePlanning(planning) {
   if (!res.ok) throw new Error("Erreur lors de la sauvegarde du planning");
   return res.json();
 }
+
+export async function fetchVoeux(jourDebut = null, jourFin = null) {
+  let url = `${BASE_URL}/voeux`;
+  const params = [];
+  if (jourDebut) params.push(`jour_debut=${jourDebut}`);
+  if (jourFin) params.push(`jour_fin=${jourFin}`);
+  if (params.length > 0) url += `?${params.join('&')}`;
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Erreur de récupération des vœux");
+  return res.json();
+}
+
+export async function createVoeu(data) {
+  const res = await fetch(`${BASE_URL}/voeux`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) {
+    let message = "Erreur lors de l'enregistrement du vœu";
+    try { const err = await res.json(); message = err.detail || message; } catch (_) {}
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function deleteVoeu(id) {
+  const res = await fetch(`${BASE_URL}/voeux/${id}`, {
+    method: 'DELETE'
+  });
+  if (!res.ok) throw new Error("Erreur lors de la suppression du vœu");
+}
+
+export const createvoeu = createVoeu;
+export const fetchvoeux = fetchVoeux;
+export const deletevoeu = deleteVoeu;
+
+// Attachement global sur window.api pour garantir la disponibilité
+const apiMethods = {
+  fetchPersonnel,
+  createPersonnel,
+  updatePersonnel,
+  deletePersonnel,
+  fetchSalles,
+  createSalle,
+  updateSalle,
+  deleteSalle,
+  fetchIndisponibilites,
+  createIndisponibilite,
+  updateIndisponibilite,
+  deleteIndisponibilite,
+  fetchConges,
+  createConge,
+  deleteConge,
+  fetchJoursFeries,
+  createJourFerie,
+  deleteJourFerie,
+  fetchPlannings,
+  fetchPlanningByWeek,
+  savePlanning,
+  fetchVoeux,
+  fetchvoeux,
+  createVoeu,
+  createvoeu,
+  deleteVoeu,
+  deletevoeu
+};
+
+if (typeof window !== 'undefined') {
+  window.api = { ...(window.api || {}), ...apiMethods };
+}
+
+export default apiMethods;
+
+
+

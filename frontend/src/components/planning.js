@@ -41,6 +41,17 @@ export function initPlanning() {
   window.checkRulesAndConflicts = checkRulesAndConflicts;
   window.exportToPDF = exportToPDF;
   window.closeConflictsModal = closeConflictsModal;
+  // Fonctions de workflow vœux & étapes
+  window.loadVoeuxForDates = loadVoeuxForDates;
+  window.saveTeamAndGoToWishes = saveTeamAndGoToWishes;
+  window.goToTeamStep = goToTeamStep;
+  window.goToWishesStep = goToWishesStep;
+  window.openWishModal = openWishModal;
+  window.closeWishModal = closeWishModal;
+  window.saveWishModal = saveWishModal;
+  window.deleteWishModal = deleteWishModal;
+  window.onWishTypeChange = onWishTypeChange;
+  window.clearAllWishes = clearAllWishes;
 }
 
 export function syncLeavesAndHolidaysIntoSchedule() {
@@ -121,6 +132,7 @@ export function loadSelectedWeekFromDropdown(key) {
   const selectedArch = state.archives[key];
   if (selectedArch) {
     state.schedule = JSON.parse(JSON.stringify(selectedArch.schedule));
+    state.planningStep = 'SCHEDULE';
     document.getElementById('week-start-date').value = selectedArch.start;
     document.getElementById('week-name').value = selectedArch.name;
     state.isEditing = false;
@@ -185,6 +197,77 @@ export function setAllRoomWeeklyAvailability(value) {
   renderRestitution();
 }
 
+export async function loadVoeuxForDates(dates) {
+  if (!dates || dates.length === 0) return;
+  try {
+    const fetchVoeuxFn = api.fetchVoeux || api.fetchvoeux || window.api?.fetchVoeux || window.api?.fetchvoeux;
+    if (!fetchVoeuxFn) return;
+    const voeux = await fetchVoeuxFn(dates[0], dates[dates.length - 1]);
+    state.voeuxList = voeux || [];
+    if (!state.wishes) state.wishes = {};
+    // Hydrater les vœux pour la semaine
+    (voeux || []).forEach(v => {
+      const agent = state.staff.find(s => s.id === v.agent_id || String(s.id) === String(v.agent_id) || s.matricule === String(v.agent_id));
+      if (!agent) return;
+      const roomObj = state.rooms.find(r => r.id === v.salle_id || String(r.id) === String(v.salle_id));
+      const wishData = {
+        id: v.id,
+        agent_id: v.agent_id,
+        jour: v.jour,
+        type: v.type, // 'souhaite' | 'indisponible'
+        salle_id: v.salle_id,
+        room: roomObj ? (roomObj.name || roomObj.nom) : ''
+      };
+      state.wishes[`${agent.matricule}_${v.jour}`] = wishData;
+      if (agent.id) state.wishes[`${agent.id}_${v.jour}`] = wishData;
+    });
+  } catch (err) {
+    console.error("Erreur lors du chargement des vœux:", err);
+  }
+}
+
+export async function saveTeamAndGoToWishes() {
+  const startVal = document.getElementById('week-start-date')?.value || '2026-06-29';
+  const dates = Array.from({ length: 7 }, (_, day) => dateAdd(startVal, day));
+  await loadVoeuxForDates(dates);
+  state.planningStep = 'WISHES';
+  renderRestitution();
+  if (window.toast) window.toast('✓ Équipe enregistrée. Vœux synchronisés depuis la base.');
+}
+
+export function goToTeamStep() {
+  state.planningStep = 'TEAM';
+  renderRestitution();
+}
+
+export async function goToWishesStep() {
+  const startVal = document.getElementById('week-start-date')?.value || '2026-06-29';
+  const dates = Array.from({ length: 7 }, (_, day) => dateAdd(startVal, day));
+  await loadVoeuxForDates(dates);
+  state.planningStep = 'WISHES';
+  renderRestitution();
+}
+
+export async function clearAllWishes() {
+  if (!confirm('Voulez-vous réinitialiser tous les vœux enregistrés en base pour cette semaine ?')) return;
+  const startVal = document.getElementById('week-start-date')?.value || '2026-06-29';
+  const dates = Array.from({ length: 7 }, (_, day) => dateAdd(startVal, day));
+  const deleteVoeuFn = api.deleteVoeu || api.deletevoeu || window.api?.deleteVoeu || window.api?.deletevoeu;
+  
+  if (state.wishes) {
+    for (const key of Object.keys(state.wishes)) {
+      const w = state.wishes[key];
+      if (w && w.id && deleteVoeuFn) {
+        try { await deleteVoeuFn(w.id); } catch (_) {}
+      }
+    }
+  }
+  state.wishes = {};
+  state.voeuxList = [];
+  renderRestitution();
+  if (window.toast) window.toast('✓ Tous les vœux ont été supprimés de la base.');
+}
+
 export function renderAvailabilityChecklist(target) {
   let filteredStaff = state.staff.filter(s => s.status === 'actif');
   if (state.activeRestitTab === 'SENIOR') filteredStaff = filteredStaff.filter(s => s.cat === 'SENIOR');
@@ -193,11 +276,12 @@ export function renderAvailabilityChecklist(target) {
   const isRoomsTab = state.activeRestitTab === 'ROOMS';
   let html = `
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
-      <div style="color:var(--text-dim); font-size:0.9rem;">☑️ Cochez le personnel <b>disponible cette semaine</b>, puis cliquez sur <b>⚡ Générer par IA</b>.</div>
-      <div style="display:flex; gap:8px;">
-        <button class="btn secondary" style="padding:6px 14px; font-size:12px;" onclick="setAllWeeklyAvailability(true)">✔ Tout cocher</button>
-        <button class="btn secondary" style="padding:6px 14px; font-size:12px;" onclick="setAllWeeklyAvailability(false)">✕ Tout décocher</button>
-        <button class="btn" style="padding:6px 14px; font-size:12px; background:var(--accent-blue); color:white;" onclick="exportAvailabilityToPDF()"><i class="fas fa-file-pdf"></i> Exporter en PDF</button>
+      <div style="color:var(--text-dim); font-size:0.9rem;">☑️ Cochez le personnel <b>disponible cette semaine</b>, puis cliquez sur <b>Enregistrer l'équipe</b> pour passer aux vœux.</div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button class="btn secondary" style="padding:6px 12px; font-size:12px;" onclick="setAllWeeklyAvailability(true)">✔ Tout cocher</button>
+        <button class="btn secondary" style="padding:6px 12px; font-size:12px;" onclick="setAllWeeklyAvailability(false)">✕ Tout décocher</button>
+        <button class="btn secondary" style="padding:6px 12px; font-size:12px;" onclick="exportAvailabilityToPDF()"><i class="fas fa-file-pdf"></i> Exporter PDF</button>
+        <button class="btn" style="padding:7px 18px; font-size:12.5px; background-color:#0c7c8c; color:white; font-weight:700;" onclick="saveTeamAndGoToWishes()">Enregistrer l'équipe →</button>
       </div>
     </div>
     <div class="table-scroll" id="availability-print-area">
@@ -234,6 +318,220 @@ export function renderAvailabilityChecklist(target) {
   target.innerHTML = html;
 }
 
+export function renderWishesView(target, dates) {
+  let filteredStaff = state.staff.filter(s => s.status === 'actif' && isWeeklyAvailable(s.matricule));
+  if (state.activeRestitTab === 'SENIOR') filteredStaff = filteredStaff.filter(s => s.cat === 'SENIOR');
+  if (state.activeRestitTab === 'RESIDENT') filteredStaff = filteredStaff.filter(s => s.cat.startsWith('RESIDENT'));
+  if (state.activeRestitTab === 'TECH') filteredStaff = filteredStaff.filter(s => s.cat === 'TECH');
+
+  let html = `
+    <div class="wishes-step-header">
+      <div style="font-size:13px; color:var(--text); line-height:1.4;">
+        📝 <b>Tableau des Vœux :</b> Saisissez les préférences ou indisponibilités (enregistrées immédiatement en base), puis lancez la génération.
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+        <button class="btn secondary" style="padding:6px 12px; font-size:12px;" onclick="goToTeamStep()">← Modifier l'équipe</button>
+        <button class="btn secondary" style="padding:6px 10px; font-size:12px;" onclick="clearAllWishes()" title="Effacer tous les vœux">🗑 Vider les vœux</button>
+        <button class="btn" style="padding:7px 18px; font-size:12.5px; background-color:#0369a1; color:white; font-weight:700;" onclick="runOptimization()">⚡ Générer par IA</button>
+      </div>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:180px;">Agent</th>`;
+  dates.forEach(d => {
+    html += `<th style="text-align:center; min-width:120px;">${dayName(d)}<br><small style="font-weight:normal">${fmtShort(d)}</small></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  if (filteredStaff.length === 0) {
+    html += `<tr><td colspan="${dates.length + 1}" style="text-align:center; padding:30px; color:var(--text-dim);">Aucun agent disponible dans cette catégorie pour la semaine sélectionnée. Cliquez sur « Modifier l'équipe » ci-dessus.</td></tr>`;
+  } else {
+    filteredStaff.forEach(s => {
+      html += `<tr>
+        <td style="font-weight:600; vertical-align:middle;">
+          ${s.name} <br><span class="badge ${s.cat}">${CATS[s.cat] ? CATS[s.cat].short : s.cat}</span>
+        </td>`;
+      dates.forEach(d => {
+        const onLeave = isOnLeave(s.matricule, d);
+        const holiday = getHoliday(d);
+        const wish = state.wishes ? (state.wishes[`${s.matricule}_${d}`] || (s.id && state.wishes[`${s.id}_${d}`])) : null;
+
+        html += `<td style="padding:6px; vertical-align:middle; text-align:center;">`;
+        if (onLeave) {
+          html += `<div class="task-cell conge" style="font-size:10.5px; width:100%; box-sizing:border-box;">Congé</div>`;
+        } else if (holiday) {
+          html += `<div class="task-cell ferie" style="font-size:10.5px; width:100%; box-sizing:border-box;">Férié</div>`;
+        } else if (wish) {
+          if (wish.type === 'souhaite') {
+            html += `<div class="wish-badge wish-souhaite" onclick="openWishModal('${s.matricule}', '${d}')" title="Modifier le vœu : ${wish.room || 'Souhait'}">
+              <span class="wish-badge-text">⭐ ${wish.room || 'Souhait'}</span>
+              <span class="wish-badge-edit-hint">✎</span>
+            </div>`;
+          } else if (wish.type === 'indisponible') {
+            html += `<div class="wish-badge wish-indisponible" onclick="openWishModal('${s.matricule}', '${d}')" title="Modifier le vœu : Indisponible">
+              <span class="wish-badge-text">⛔ Indisponible</span>
+              <span class="wish-badge-edit-hint">✎</span>
+            </div>`;
+          }
+        } else {
+          html += `<button class="btn-add-wish" type="button" onclick="openWishModal('${s.matricule}', '${d}')">+ vœu</button>`;
+        }
+        html += `</td>`;
+      });
+      html += `</tr>`;
+    });
+  }
+
+  html += `</tbody></table></div>`;
+  target.innerHTML = html;
+}
+
+export function openWishModal(mat, date) {
+  const agent = state.staff.find(s => s.matricule === mat || String(s.id) === String(mat));
+  if (!agent) return;
+
+  const matInput = document.getElementById('wish-agent-mat');
+  const dateInput = document.getElementById('wish-date');
+  const titleEl = document.getElementById('wish-modal-title');
+  const typeSelect = document.getElementById('wish-type');
+  const roomSelect = document.getElementById('wish-room-select');
+  const deleteBtn = document.getElementById('wish-delete-btn');
+
+  if (matInput) matInput.value = agent.matricule;
+  if (dateInput) dateInput.value = date;
+  if (titleEl) titleEl.textContent = `⭐ Vœu — ${agent.name} (${dayName(date)} ${formatDateDMY(date)})`;
+
+  // Remplir dynamiquement la liste des salles avec salle.id
+  if (roomSelect) {
+    const roomsList = Array.isArray(state.rooms) ? state.rooms : [];
+    if (roomsList.length === 0) {
+      roomSelect.innerHTML = `<option value="">-- Aucune salle disponible --</option>`;
+    } else {
+      roomSelect.innerHTML = roomsList.map(r => `<option value="${r.id}">${r.name || r.nom || ('Salle ' + r.id)}</option>`).join('');
+    }
+  }
+
+  const existing = state.wishes ? (state.wishes[`${agent.matricule}_${date}`] || (agent.id && state.wishes[`${agent.id}_${date}`])) : null;
+  if (existing) {
+    if (typeSelect) typeSelect.value = existing.type || 'souhaite';
+    if (roomSelect && existing.salle_id) roomSelect.value = String(existing.salle_id);
+    if (deleteBtn) deleteBtn.style.display = 'inline-block';
+  } else {
+    if (typeSelect) typeSelect.value = 'souhaite';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+  }
+
+  onWishTypeChange();
+
+  const modal = document.getElementById('wish-modal');
+  if (modal) {
+    modal.classList.add('active');
+    modal.style.display = 'flex';
+  }
+}
+
+export function closeWishModal() {
+  const modal = document.getElementById('wish-modal');
+  if (modal) {
+    modal.classList.remove('active');
+    modal.style.display = 'none';
+  }
+}
+
+export function onWishTypeChange() {
+  const typeSelect = document.getElementById('wish-type');
+  const roomContainer = document.getElementById('wish-room-container');
+  if (!typeSelect || !roomContainer) return;
+  roomContainer.style.display = (typeSelect.value === 'souhaite') ? 'block' : 'none';
+}
+
+export async function saveWishModal() {
+  const mat = document.getElementById('wish-agent-mat')?.value;
+  const date = document.getElementById('wish-date')?.value;
+  const type = document.getElementById('wish-type')?.value || 'souhaite';
+  const roomSelect = document.getElementById('wish-room-select');
+  const salleId = type === 'souhaite' ? parseInt(roomSelect?.value, 10) : null;
+
+  if (!mat || !date) return;
+  const agent = state.staff.find(s => s.matricule === mat || String(s.id) === String(mat));
+  if (!agent || !agent.id) {
+    if (window.toast) window.toast('⚠ Agent introuvable pour la sauvegarde en base');
+    return;
+  }
+
+  if (type === 'souhaite' && (!salleId || isNaN(salleId))) {
+    if (window.toast) window.toast('⚠ Veuillez sélectionner une salle valide');
+    return;
+  }
+
+  const payload = {
+    agent_id: agent.id,
+    jour: date,
+    type: type,
+    salle_id: salleId || null
+  };
+
+  try {
+    const createVoeuFn = api.createVoeu || api.createvoeu || window.api?.createVoeu || window.api?.createvoeu;
+    if (!createVoeuFn) {
+      throw new Error("Fonction d'enregistrement des vœux non disponible");
+    }
+
+    const saved = await createVoeuFn(payload);
+    if (!state.wishes) state.wishes = {};
+    const roomObj = state.rooms.find(r => r.id === saved.salle_id || String(r.id) === String(saved.salle_id));
+    const wishData = {
+      id: saved.id,
+      agent_id: saved.agent_id,
+      jour: saved.jour,
+      type: saved.type,
+      salle_id: saved.salle_id,
+      room: roomObj ? (roomObj.name || roomObj.nom) : ''
+    };
+    state.wishes[`${agent.matricule}_${date}`] = wishData;
+    if (agent.id) state.wishes[`${agent.id}_${date}`] = wishData;
+
+    closeWishModal();
+    renderRestitution();
+    if (window.toast) window.toast(`✓ Vœu enregistré pour ${agent.name}`);
+  } catch (err) {
+    console.error(err);
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur d'enregistrement du vœu"}`);
+  }
+}
+
+export async function deleteWishModal() {
+  const mat = document.getElementById('wish-agent-mat')?.value;
+  const date = document.getElementById('wish-date')?.value;
+  if (!mat || !date) return;
+
+  const agent = state.staff.find(s => s.matricule === mat || String(s.id) === String(mat));
+  const matKey = agent ? agent.matricule : mat;
+  const key = `${matKey}_${date}`;
+  const existingWish = state.wishes ? (state.wishes[key] || (agent?.id && state.wishes[`${agent.id}_${date}`])) : null;
+  const deleteVoeuFn = api.deleteVoeu || api.deletevoeu || window.api?.deleteVoeu || window.api?.deletevoeu;
+
+  try {
+    if (existingWish && existingWish.id && deleteVoeuFn) {
+      await deleteVoeuFn(existingWish.id);
+    }
+    if (state.wishes) {
+      delete state.wishes[key];
+      if (agent?.id) delete state.wishes[`${agent.id}_${date}`];
+    }
+
+    closeWishModal();
+    renderRestitution();
+    if (window.toast) window.toast('✓ Vœu supprimé de la base');
+  } catch (err) {
+    console.error(err);
+    if (window.toast) window.toast(`🛑 ${err.message || "Erreur lors de la suppression"}`);
+  }
+}
+
 export function exportAvailabilityToPDF() {
   const area = document.getElementById('availability-print-area');
   if (!area) return;
@@ -267,16 +565,30 @@ export function exportAvailabilityToPDF() {
 
 function isRoomAvailableForDate(room, date) {
   if (!room || !isRoomWeeklyAvailable(room.id)) return false;
+
+  // 1. Vérifier les indisponibilités multi-périodes enregistrées
+  if (Array.isArray(state.indisponibilitesList)) {
+    const isUnavail = state.indisponibilitesList.some(p => {
+      if (Number(p.salle_id) !== Number(room.id)) return false;
+      if (!p.date_debut || !p.date_fin) return false;
+      return inRange(date, p.date_debut, p.date_fin);
+    });
+    if (isUnavail) return false;
+  }
+
+  // 2. Vérification rétro-compatible
   if (!room.isBroken) return true;
   if (!room.brokenStart || !room.brokenEnd) return false;
   return !inRange(date, room.brokenStart, room.brokenEnd);
 }
 
 function canAgentWorkInRoom(agent, room) {
-  const allowedRooms = (agent.allowedRooms || []).map(String);
-  // La BD stocke habituellement des IDs, tandis que certaines anciennes
-  // données utilisent encore les noms des salles.
-  return allowedRooms.length === 0 || allowedRooms.includes(String(room.id)) || allowedRooms.includes(room.name);
+  const rawAllowed = agent.allowedRooms || agent.salle_ids || [];
+  const allowed = (Array.isArray(rawAllowed) ? rawAllowed : String(rawAllowed).split(',')).map(r => String(r).trim()).filter(Boolean);
+  if (allowed.length === 0) return true;
+  return allowed.includes(String(room.id)) || 
+         allowed.includes(String(room.name)) || 
+         (room.nom && allowed.includes(String(room.nom)));
 }
 
 function categoryMatches(agent, category) {
@@ -309,18 +621,33 @@ export function runOptimization() {
   let assignmentsCreated = 0;
   let uncoveredSlots = 0;
 
+  // Suivi des vœux satisfaits
+  let totalWishesCount = 0;
+  let fulfilledWishesCount = 0;
+
   datesList.forEach(date => {
     const busyToday = new Set();
     const holiday = getHoliday(date);
 
+    // 1. Initialiser congés, fériés et vœux d'indisponibilité
     activeStaff.forEach(agent => {
       const key = `${agent.matricule}_${date}`;
+      const wish = state.wishes ? state.wishes[key] : null;
+
       if (isOnLeave(agent.matricule, date)) {
         gridAssignments[key] = 'CONGE';
         busyToday.add(agent.matricule);
       } else if (holiday) {
         gridAssignments[key] = 'FERIE';
         busyToday.add(agent.matricule);
+      } else if (!isWeeklyAvailable(agent.matricule)) {
+        gridAssignments[key] = 'REPOS';
+        busyToday.add(agent.matricule);
+      } else if (wish && wish.type === 'indisponible') {
+        totalWishesCount += 1;
+        gridAssignments[key] = 'REPOS';
+        busyToday.add(agent.matricule); // Vœu d'indisponibilité honoré
+        fulfilledWishesCount += 1;
       } else {
         gridAssignments[key] = 'REPOS';
       }
@@ -334,10 +661,37 @@ export function runOptimization() {
       assignmentsCreated += 1;
     };
 
+    // 2. Traiter en priorité les vœux "souhaite" (affectation prioritaire demandée)
+    activeStaff.forEach(agent => {
+      if (busyToday.has(agent.matricule) || !isWeeklyAvailable(agent.matricule)) return;
+      const key = `${agent.matricule}_${date}`;
+      const wish = state.wishes ? state.wishes[key] : null;
+
+      if (wish && wish.type === 'souhaite') {
+        totalWishesCount += 1;
+        const matchedRoom = rooms.find(r => 
+          (wish.salle_id && r.id === wish.salle_id) || 
+          (wish.room && (r.name === wish.room || r.nom === wish.room))
+        );
+        if (matchedRoom && canAgentWorkInRoom(agent, matchedRoom)) {
+          assign(agent, matchedRoom);
+          fulfilledWishesCount += 1;
+        }
+      }
+    });
+
+    // 3. Remplir les besoins restants par catégorie et minima de postes
     ['SENIOR', 'RESIDENT', 'INF', 'TECH'].forEach(category => {
       rooms.forEach(room => {
         const needed = roomMinimum(room, category);
-        for (let slot = 0; slot < needed; slot += 1) {
+        const alreadyAssignedCount = activeStaff.filter(a => 
+          categoryMatches(a, category) && 
+          gridAssignments[`${a.matricule}_${date}`] === room.name
+        ).length;
+
+        const remainingNeeded = Math.max(0, needed - alreadyAssignedCount);
+
+        for (let slot = 0; slot < remainingNeeded; slot += 1) {
           const candidates = activeStaff
             .filter(agent => !busyToday.has(agent.matricule))
             .filter(agent => isWeeklyAvailable(agent.matricule))
@@ -355,12 +709,22 @@ export function runOptimization() {
     });
   });
 
-  state.schedule = { datesList, gridAssignments, nightAssignments };
+  state.schedule = { 
+    datesList, 
+    gridAssignments, 
+    nightAssignments,
+    wishesStats: {
+      total: totalWishesCount,
+      respected: fulfilledWishesCount,
+      failed: totalWishesCount - fulfilledWishesCount
+    }
+  };
+  state.planningStep = 'SCHEDULE';
   renderRestitution();
   const coverageMessage = uncoveredSlots > 0
     ? ` (${uncoveredSlots} besoin(s) non couvert(s) : personnel insuffisant ou non autorisé)`
     : '';
-  window.toast(`⚡ Planning généré : ${assignmentsCreated} affectation(s)${coverageMessage}`);
+  window.toast(`⚡ Planning généré : ${assignmentsCreated} affectation(s) — ${fulfilledWishesCount}/${totalWishesCount} vœux respectés${coverageMessage}`);
 }
 
 export function setRestitView(tabName) {
@@ -520,9 +884,9 @@ export function renderRoomsView(target, dates) {
   state.rooms.forEach(room => {
     html += `<tr><td style="vertical-align:top; background:var(--panel-2);"><div style="font-weight:700; font-size:14px; color:var(--accent-blue-dark);">${room.name}</div></td>`;
     dates.forEach(d => {
-      const isBroken = room.isBroken && inRange(d, room.brokenStart, room.brokenEnd);
+      const isBroken = !isRoomAvailableForDate(room, d);
       if (isBroken) {
-        html += `<td style="background:var(--red-dim); text-align:center; vertical-align:middle;"><span style="color:var(--red); font-weight:bold; font-size:11px;">⚠️ EN PANNE / MAINTENANCE</span></td>`;
+        html += `<td style="background:var(--red-dim); text-align:center; vertical-align:middle;"><span style="color:var(--red); font-weight:bold; font-size:11px;">⚠️ INDISPONIBLE / EN PANNE</span></td>`;
       } else {
         const assigned = activeStaff.filter(s => {
           const primary = normalizeTask(state.schedule.gridAssignments[`${s.matricule}_${d}`]);
@@ -576,20 +940,81 @@ export function renderRoomsView(target, dates) {
 export function renderRestitution() {
   const target = document.getElementById('restitution-content-target');
   if (!target) return;
-  if (!state.schedule) {
+
+  const startVal = document.getElementById('week-start-date')?.value || (state.schedule?.datesList?.[0]) || '2026-06-29';
+  const currentDates = state.schedule?.datesList || Array.from({ length: 7 }, (_, day) => dateAdd(startVal, day));
+
+  const subTitleEl = document.getElementById('displayed-planning-subtitle');
+  const mainTitleEl = document.getElementById('displayed-planning-title');
+  const saveBtnContainer = document.getElementById('bottom-save-container');
+
+  // Étape 1 : Disponibilité de l'équipe
+  if (state.planningStep === 'TEAM' || (!state.schedule && state.planningStep !== 'WISHES')) {
+    state.planningStep = 'TEAM';
+    if (mainTitleEl) mainTitleEl.textContent = "Disponibilité de l'équipe";
+    if (subTitleEl) subTitleEl.textContent = "Étape 1/3 : Cochez le personnel disponible cette semaine, puis cliquez sur « Enregistrer l'équipe ».";
+    if (saveBtnContainer) {
+      saveBtnContainer.innerHTML = `<button class="btn" style="background-color: #0c7c8c; padding: 12px 24px; font-weight:700; color:white;" onclick="saveTeamAndGoToWishes()">Enregistrer l'équipe →</button>`;
+    }
     renderAvailabilityChecklist(target);
     return;
   }
+
+  // Étape 2 : Tableau des Vœux
+  if (state.planningStep === 'WISHES') {
+    if (mainTitleEl) mainTitleEl.textContent = "Vœux & Préférences de l'équipe";
+    if (subTitleEl) subTitleEl.textContent = "Étape 2/3 : Saisissez les vœux particuliers par agent et par jour, puis cliquez sur « ⚡ Générer par IA ».";
+    if (saveBtnContainer) {
+      saveBtnContainer.innerHTML = `
+        <div style="display:flex; gap:10px; justify-content:flex-end; width:100%; flex-wrap:wrap;">
+          <button class="btn secondary" style="padding:12px 20px;" onclick="goToTeamStep()">← Modifier l'équipe</button>
+          <button class="btn" style="background-color: #0369a1; padding: 12px 24px; font-weight:700; color:white;" onclick="runOptimization()">⚡ Générer par IA</button>
+        </div>
+      `;
+    }
+    renderWishesView(target, currentDates);
+    return;
+  }
+
+  // Étape 3 : Planning Restitution (state.planningStep === 'SCHEDULE')
+  const weekName = document.getElementById('week-name')?.value || 'Semaine';
+  if (mainTitleEl) mainTitleEl.textContent = "Planning Hebdomadaire";
+  if (subTitleEl) subTitleEl.textContent = `Planning généré pour la ${weekName} — Vérifiez, modifiez si besoin et validez.`;
+  if (saveBtnContainer) {
+    saveBtnContainer.innerHTML = `
+      <div style="display:flex; gap:10px; justify-content:flex-end; width:100%; flex-wrap:wrap;">
+        <button class="btn secondary" style="padding:12px 18px;" onclick="goToWishesStep()">📝 Modifier les vœux</button>
+        <button class="btn secondary" style="padding:12px 18px;" onclick="goToTeamStep()">👥 Modifier l'équipe</button>
+        <button class="btn" style="background-color: #1e40af; padding: 12px 24px; color:white;" onclick="saveCurrentWeek()">💾 Enregistrer cette semaine</button>
+      </div>
+    `;
+  }
+
   const dates = state.schedule.datesList;
   if (state.activeRestitTab === 'ROOMS') {
     renderRoomsView(target, dates);
     return;
   }
+
   let filteredStaff = state.staff.filter(s => s.status === 'actif');
   if (state.activeRestitTab === 'SENIOR') filteredStaff = filteredStaff.filter(s => s.cat === 'SENIOR');
   if (state.activeRestitTab === 'RESIDENT') filteredStaff = filteredStaff.filter(s => s.cat.startsWith('RESIDENT'));
   if (state.activeRestitTab === 'TECH') filteredStaff = filteredStaff.filter(s => s.cat === 'TECH');
-  let html = `<div class="table-scroll"><table><thead><tr><th>Agent</th>`;
+
+  // Bandeau synthétique des vœux si des vœux existent
+  const ws = state.schedule.wishesStats;
+  let summaryBannerHtml = '';
+  if (ws && ws.total > 0) {
+    const isAllGood = ws.respected === ws.total;
+    summaryBannerHtml = `
+      <div style="margin-bottom:12px; padding:10px 14px; border-radius:6px; background:${isAllGood ? 'rgba(31, 157, 107, 0.08)' : 'rgba(217, 119, 6, 0.08)'}; border:1px solid ${isAllGood ? 'rgba(31, 157, 107, 0.3)' : 'rgba(217, 119, 6, 0.3)'}; display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; color:${isAllGood ? '#065f46' : '#92400e'};">
+        <span>${isAllGood ? '✨' : '⚠️'}</span>
+        <span>Satisfaction des vœux : <b>${ws.respected} sur ${ws.total} vœu(x) respecté(s)</b> ${isAllGood ? '(100% honorés)' : `(${ws.failed} vœu(x) non honoré(s) par conflit de seuils/capacité)`}</span>
+      </div>
+    `;
+  }
+
+  let html = `${summaryBannerHtml}<div class="table-scroll"><table><thead><tr><th>Agent</th>`;
   dates.forEach(d => html += `<th style="text-align:center">${dayName(d)}<br><small style="font-weight:normal">${fmtShort(d)}</small></th>`);
   html += `</tr></thead><tbody>`;
   filteredStaff.forEach(s => {
@@ -600,7 +1025,19 @@ export function renderRestitution() {
       const nightTask = state.schedule.nightAssignments?.[`${s.matricule}_${d}`];
       const cellClass = getTaskClass(taskCode);
       const label = getTaskLabel(taskCode);
-      html += `<td style="padding:4px;"><div class="slot-container" ${state.isEditing ? `ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${s.matricule}', '${d}')"` : ''}><div class="${cellClass}">${label}</div>${nightTask ? `<div class="${getTaskClass(nightTask) || 'task-cell garde'} night-duty">🌙 ${getTaskLabel(nightTask) || nightTask}</div>` : ''}</div></td>`;
+
+      // Indicateur visuel de vœu respecté
+      const wish = state.wishes ? (state.wishes[`${s.matricule}_${d}`] || (s.id && state.wishes[`${s.id}_${d}`])) : null;
+      let wishIndicator = '';
+      if (wish) {
+        if (wish.type === 'souhaite' && (taskCode === wish.room || taskCode.toLowerCase() === (wish.room || '').toLowerCase())) {
+          wishIndicator = `<span style="margin-left:4px; font-size:11px;" title="💡 Vœu honoré : ${wish.room}">💡</span>`;
+        } else if (wish.type === 'indisponible' && taskCode === 'REPOS') {
+          wishIndicator = `<span style="margin-left:4px; font-size:11px;" title="🚫 Vœu d'indisponibilité respecté">🚫</span>`;
+        }
+      }
+
+      html += `<td style="padding:4px;"><div class="slot-container" ${state.isEditing ? `ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event, '${s.matricule}', '${d}')"` : ''}><div class="${cellClass}">${label}${wishIndicator}</div>${nightTask ? `<div class="${getTaskClass(nightTask) || 'task-cell garde'} night-duty">🌙 ${getTaskLabel(nightTask) || nightTask}</div>` : ''}</div></td>`;
     });
     html += `</tr>`;
   });
@@ -621,9 +1058,9 @@ export function checkRulesAndConflicts() {
       if (isOnLeave(agent.matricule, date) && normTask !== 'CONGE') {
         conflicts.push(`<b>${agent.name}</b> est planifié (${getTaskLabel(normTask)}) le <b>${date}</b> pendant son congé.`);
       }
-      const isBrokenDay = state.rooms.some(r => (r.name === normTask || String(r.id) === normTask) && r.isBroken && inRange(date, r.brokenStart, r.brokenEnd));
-      if (isBrokenDay) {
-        conflicts.push(`<b>${agent.name}</b> est affecté à une machine en panne le <b>${date}</b>.`);
+      const targetedRoom = state.rooms.find(r => r.name === normTask || String(r.id) === normTask || (r.nom && r.nom === normTask));
+      if (targetedRoom && !isRoomAvailableForDate(targetedRoom, date)) {
+        conflicts.push(`<b>${agent.name}</b> est affecté à la salle <b>${targetedRoom.name || targetedRoom.nom}</b> qui est indisponible le <b>${date}</b>.`);
       }
     });
   });

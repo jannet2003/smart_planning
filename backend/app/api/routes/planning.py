@@ -164,11 +164,13 @@ def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
                 task_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             except Exception:
                 continue
-            person = all_personnel.get(mat)
+            person = all_personnel.get(mat) or (all_personnel_by_id.get(int(mat)) if str(mat).isdigit() else None)
             if not person:
                 continue
             for r_name in extra_rooms:
                 salle = all_salles_by_name.get(str(r_name).strip().lower())
+                if not salle:
+                    salle = all_salles_by_id.get(int(r_name)) if str(r_name).isdigit() else None
                 if not salle:
                     continue
                 existing = db.query(Planning).filter_by(
@@ -192,7 +194,7 @@ def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
                 task_date = datetime.strptime(date_str, "%Y-%m-%d").date()
             except Exception:
                 continue
-            person = all_personnel.get(mat)
+            person = all_personnel.get(mat) or (all_personnel_by_id.get(int(mat)) if str(mat).isdigit() else None)
             if not person:
                 continue
             default_salle = all_salles_by_name.get("scanner") or db.query(Salle).first()

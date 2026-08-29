@@ -81,10 +81,12 @@ class CompatibiliteSenior(Base):
 class IndisponibiliteSalle(Base):
     __tablename__ = "INDISPONIBILITE_SALLE"
 
-    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), primary_key=True)
-    date_debut = Column(Date, nullable=False, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), nullable=False, index=True)
+    date_debut = Column(Date, nullable=False)
     date_fin = Column(Date, nullable=False)
     raison = Column(String, nullable=True)
+    type_indisponibilite = Column(String, nullable=True, default="maintenance")
 
     salle = relationship("Salle", back_populates="indisponibilites")
 

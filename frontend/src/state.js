@@ -63,6 +63,9 @@ export const state = {
   rooms: [], // Rooms loaded from SQLite
   indisponibilitesList: [], // Indisponibilités from SQLite
   schedule: null,
+  planningStep: 'TEAM', // 'TEAM' | 'WISHES' | 'SCHEDULE'
+  wishes: {}, // Key: `${matricule}_${date}` => { id?: number, type: 'souhaite'|'indisponible', salle_id?: number, room?: string }
+  voeuxList: [], // Raw voeux records from SQLite
   activeRestitTab: 'SENIOR',
   archives: {},
   isEditing: false,

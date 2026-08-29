@@ -17,8 +17,38 @@ def _payload_from_model(data):
     return data.dict()
 
 
+def _format_indispo(item: IndisponibiliteSalle):
+    return {
+        "id": item.id,
+        "salle_id": item.salle_id,
+        "date_debut": str(item.date_debut),
+        "date_fin": str(item.date_fin),
+        "raison": item.raison or "",
+        "motif": item.raison or "",
+        "type_indisponibilite": item.type_indisponibilite or "maintenance",
+    }
+
+
 def _normalize_salle_payload(item: Salle):
-    indisponibilite = item.indisponibilites[0] if item.indisponibilites else None
+    """
+    Retourne la salle avec TOUTES ses indisponibilités triées par date.
+    is_broken / broken_start / broken_end = première période active ou à venir (compatibilité).
+    """
+    today = date.today()
+    sorted_indispos = sorted(item.indisponibilites, key=lambda i: i.date_debut)
+
+    # Période active aujourd'hui (pour is_broken rétrocompatibilité)
+    active = next(
+        (i for i in sorted_indispos if i.date_debut <= today <= i.date_fin),
+        None
+    )
+    # Sinon la prochaine à venir
+    upcoming = next(
+        (i for i in sorted_indispos if i.date_debut > today),
+        None
+    )
+    ref = active or upcoming
+
     return {
         "id": item.id,
         "nom": item.nom,
@@ -35,14 +65,18 @@ def _normalize_salle_payload(item: Salle):
         "min_tech": item.min_tech if item.min_tech is not None else 0,
         "max_tech": item.max_tech if item.max_tech is not None else 0,
         "senior_compatible_rooms": item.senior_compatible_rooms,
-        "is_broken": indisponibilite is not None,
-        "broken_start": str(indisponibilite.date_debut) if indisponibilite else "",
-        "broken_end": str(indisponibilite.date_fin) if indisponibilite else "",
-        "broken_reason": indisponibilite.raison if indisponibilite else "",
+        # Champs rétrocompatibles (moteur de planning)
+        "is_broken": active is not None,
+        "broken_start": str(ref.date_debut) if ref else "",
+        "broken_end": str(ref.date_fin) if ref else "",
+        "broken_reason": ref.raison if ref else "",
+        # Liste complète des indisponibilités
+        "indisponibilites": [_format_indispo(i) for i in sorted_indispos],
     }
 
 
 def _sync_salle_details(item: Salle, payload, db: Session):
+    """Met à jour uniquement les capacités (min/max). Les indisponibilités sont gérées séparément."""
     for key in [
         "min_senior",
         "max_senior",
@@ -55,17 +89,6 @@ def _sync_salle_details(item: Salle, payload, db: Session):
     ]:
         if key in payload and payload[key] is not None:
             setattr(item, key, int(payload[key]))
-    for indisponibilite in list(item.indisponibilites):
-        db.delete(indisponibilite)
-    if payload.get("is_broken") and payload.get("broken_start") and payload.get("broken_end"):
-        db.add(
-            IndisponibiliteSalle(
-                salle_id=item.id,
-                date_debut=date.fromisoformat(payload["broken_start"]),
-                date_fin=date.fromisoformat(payload["broken_end"]),
-                raison=payload.get("broken_reason") or None,
-            )
-        )
 
 
 def _sync_salle_compatibility(item: Salle, senior_mode: str, compatible_rooms_raw: Optional[str], db: Session):

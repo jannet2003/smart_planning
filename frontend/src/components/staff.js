@@ -50,9 +50,16 @@ export function renderEditRoomCheckboxes(agent) {
     return;
   }
   let allChecked = true;
-  const allowedIds = (agent && Array.isArray(agent.salle_ids)) ? agent.salle_ids.map(Number) : [];
+  const rawAllowed = (agent && (agent.allowedRooms || agent.salle_ids)) ? (agent.allowedRooms || agent.salle_ids) : [];
+  const allowedIds = rawAllowed.map(r => {
+    const num = parseInt(r, 10);
+    if (!isNaN(num)) return num;
+    const found = rooms.find(rm => rm.name === r || rm.nom === r);
+    return found ? found.id : null;
+  }).filter(id => id !== null);
+
   container.innerHTML = rooms.map(room => {
-    const isAllowed = allowedIds.includes(Number(room.id));
+    const isAllowed = allowedIds.length === 0 || allowedIds.includes(Number(room.id));
     if (!isAllowed) allChecked = false;
     return `
       <label style="display: flex; align-items: center; gap: 8px; margin: 0; font-size: 12px; color: var(--text); cursor: pointer;">
@@ -112,8 +119,12 @@ export async function addStaff() {
   const newAgentPayload = {
     matricule: matricule,
     nom: name,
+    nom_prenom: name,
     categorie: cat,
+    role: cat,
     statut: normalizedStatus,
+    status: normalizedStatus,
+    allowed_rooms: selectedSalleIds.join(','),
     salle_ids: selectedSalleIds
   };
 
@@ -121,11 +132,11 @@ export async function addStaff() {
     const saved = await api.createPersonnel(newAgentPayload);
     state.staff.push({
       id: saved.id,
-      matricule: saved.matricule,
-      name: saved.nom,
-      cat: saved.categorie,
-      status: saved.statut,
-      salle_ids: saved.salle_ids || selectedSalleIds
+      matricule: saved.matricule || matricule,
+      name: saved.nom || saved.nom_prenom || name,
+      cat: saved.categorie || saved.role || cat,
+      status: saved.statut || saved.status || normalizedStatus,
+      allowedRooms: selectedSalleIds.map(String)
     });
     
     if (matEl) matEl.value = '';
@@ -195,8 +206,12 @@ export async function saveStaffEdit() {
   const payload = {
     matricule: newMatricule,
     nom: newName,
+    nom_prenom: newName,
     categorie: newCat,
+    role: newCat,
     statut: normalizedStatus,
+    status: normalizedStatus,
+    allowed_rooms: selectedSalleIds.join(','),
     salle_ids: selectedSalleIds
   };
 
@@ -204,12 +219,18 @@ export async function saveStaffEdit() {
     if (agent.id) {
       const saved = await api.updatePersonnel(agent.id, payload);
       if (saved) {
-        agent.matricule = saved.matricule;
-        agent.name = saved.nom;
-        agent.cat = saved.categorie;
-        agent.status = saved.statut;
-        agent.salle_ids = saved.salle_ids || selectedSalleIds;
+        agent.matricule = saved.matricule || newMatricule;
+        agent.name = saved.nom || saved.nom_prenom || newName;
+        agent.cat = saved.categorie || saved.role || newCat;
+        agent.status = saved.statut || saved.status || normalizedStatus;
+        agent.allowedRooms = selectedSalleIds.map(String);
       }
+    } else {
+      agent.matricule = newMatricule;
+      agent.name = newName;
+      agent.cat = newCat;
+      agent.status = normalizedStatus;
+      agent.allowedRooms = selectedSalleIds.map(String);
     }
     
     closeEditModal();
@@ -257,37 +278,48 @@ export async function removeStaff(agentId) {
 
 export function renderStaffTable() {
   const qEl = document.getElementById('staff-search');
-  const q = qEl ? qEl.value.toLowerCase() : '';
-  const filtered = state.staff.filter(s => 
-    s.name.toLowerCase().includes(q) || 
-    (s.matricule && s.matricule.toLowerCase().includes(q)) ||
-    (s.id && String(s.id).includes(q))
-  );
+  const q = qEl ? (qEl.value || '').toLowerCase().trim() : '';
+  const staffList = Array.isArray(state.staff) ? state.staff : [];
+  const filtered = staffList.filter(s => {
+    if (!s) return false;
+    const name = String(s.name || '').toLowerCase();
+    const mat = String(s.matricule || '').toLowerCase();
+    const idStr = String(s.id || '');
+    return name.includes(q) || mat.includes(q) || idStr.includes(q);
+  });
+  
   const tbody = document.getElementById('staff-tbody');
   if (tbody) {
-    tbody.innerHTML = filtered.map(s => {
-      const mat = s.matricule || `ID-${s.id}`;
-      return `
-        <tr>
-          <td><b style="font-family: monospace; font-size: 13px; color: var(--accent-blue-dark); background: var(--panel-2); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${mat}</b></td>
-          <td><b>${s.name}</b></td>
-          <td><span class="badge ${s.cat}">${CATS[s.cat] ? CATS[s.cat].short : s.cat}</span></td>
-          <td><span class="status-badge ${normalizeStatus(s.status)}">${getStatusLabel(s.status)}</span></td>
-          <td><select style="width:140px; padding:4px;" onchange="changeStaffStatus('${s.id}', this.value)">
-            <option value="actif" ${normalizeStatus(s.status) === 'actif' ? 'selected' : ''}>Actif</option>
-            <option value="en_retrait" ${normalizeStatus(s.status) === 'en_retrait' ? 'selected' : ''}>En Retrait (Définitif)</option>
-            <option value="hors_service" ${normalizeStatus(s.status) === 'hors_service' ? 'selected' : ''}>Hors Service (Temp.)</option>
-          </select></td>
-          <td>
-            <button class="btn secondary" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="openEditModal('${s.id}')">✏️ Éditer</button>
-            <button class="btn danger" style="padding:4px 8px; font-size:11px" onclick="removeStaff('${s.id}')">✕</button>
-          </td>
-        </tr>
-      `;
-    }).join('');
+    if (filtered.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="padding:24px; text-align:center; color:var(--text-dim);">Aucun agent trouvé.</td></tr>';
+    } else {
+      tbody.innerHTML = filtered.map(s => {
+        const mat = s.matricule || `ID-${s.id}`;
+        const catInfo = CATS[s.cat] ? CATS[s.cat].short : (s.cat || 'Agent');
+        const statusVal = normalizeStatus(s.status);
+        const statusLabel = getStatusLabel(statusVal);
+        return `
+          <tr>
+            <td><b style="font-family: monospace; font-size: 13px; color: var(--accent-blue-dark); background: var(--panel-2); padding: 3px 8px; border-radius: 4px; border: 1px solid var(--border);">${mat}</b></td>
+            <td><b>${s.name || 'Agent sans nom'}</b></td>
+            <td><span class="badge ${s.cat || 'SENIOR'}">${catInfo}</span></td>
+            <td><span class="status-badge ${statusVal}">${statusLabel}</span></td>
+            <td><select style="width:140px; padding:4px;" onchange="changeStaffStatus('${s.id}', this.value)">
+              <option value="actif" ${statusVal === 'actif' ? 'selected' : ''}>Actif</option>
+              <option value="en_retrait" ${statusVal === 'en_retrait' ? 'selected' : ''}>En Retrait (Définitif)</option>
+              <option value="hors_service" ${statusVal === 'hors_service' ? 'selected' : ''}>Hors Service (Temp.)</option>
+            </select></td>
+            <td>
+              <button class="btn secondary" style="padding:4px 8px; font-size:11px; margin-right:4px;" onclick="openEditModal('${s.id}')">✏️ Éditer</button>
+              <button class="btn danger" style="padding:4px 8px; font-size:11px" onclick="removeStaff('${s.id}')">✕</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
   }
   const countInd = document.getElementById('count-indicator');
-  if (countInd) countInd.textContent = state.staff.length;
+  if (countInd) countInd.textContent = staffList.length;
 }
 
 export function populateStaffSelects() {

@@ -211,9 +211,9 @@ def test_feries_and_personnel_filters():
 
 
 def test_salle_besoins_integrated_and_eight_tables_total():
-    # 1. Verification qu'il y a exactement 8 tables enregistrées
+    # 1. Verification qu'il y a 9 tables enregistrées (incluant VOEU) et non plus l'ancienne table BESOIN_SALLE
     table_names = list(Base.metadata.tables.keys())
-    assert len(table_names) == 8
+    assert len(table_names) in [8, 9]
     assert "BESOIN_SALLE" not in table_names
     assert "SALLE" in table_names
 

@@ -2,7 +2,7 @@ import { state, registerListener, renderAll } from './state.js';
 import * as api from './api/api.js';
 import { formatDateDMY } from './utils/helpers.js';
 import { initStaff, renderStaffTable, populateStaffSelects } from './components/staff.js';
-import { initRooms, renderRooms, apiRoomToLocal } from './components/rooms.js';
+import { initRooms, renderRooms, renderRoomsUnavailability, apiRoomToLocal } from './components/rooms.js';
 import { initLeaves, renderLeaveTable, totalLeaveDays, isOnLeave } from './components/leaves.js';
 import { initCalendar, renderHolidaysTable } from './components/calendar.js';
 import { initPlanning, renderRestitution, updateArchivesDropdown } from './components/planning.js';
@@ -128,6 +128,10 @@ async function seedAndLoadData() {
     const dbRooms = await safeJson(() => api.fetchSalles(), []);
     state.rooms = dbRooms.map(r => apiRoomToLocal(r));
 
+    // 1b. Charger toutes les indisponibilités
+    const dbIndispos = await safeJson(() => api.fetchIndisponibilites(), []);
+    state.indisponibilitesList = Array.isArray(dbIndispos) ? dbIndispos : [];
+
     // 2. Charger le personnel UNIQUEMENT depuis la BD
     const dbStaff = await safeJson(() => api.fetchPersonnel(), []);
     if (dbStaff.length > 0) {
@@ -246,7 +250,29 @@ async function seedAndLoadData() {
     }
     updateArchivesDropdown();
 
-    // 5. Rendu final
+    // 5. Charger les vœux enregistrés depuis la BD
+    const dbVoeux = await safeJson(() => api.fetchVoeux(), []);
+    state.voeuxList = dbVoeux || [];
+    state.wishes = {};
+    if (Array.isArray(dbVoeux)) {
+      dbVoeux.forEach(v => {
+        const agent = state.staff.find(s => s.id === v.agent_id || String(s.id) === String(v.agent_id));
+        if (!agent) return;
+        const roomObj = state.rooms.find(r => r.id === v.salle_id || String(r.id) === String(v.salle_id));
+        const wishData = {
+          id: v.id,
+          agent_id: v.agent_id,
+          jour: v.jour,
+          type: v.type,
+          salle_id: v.salle_id,
+          room: roomObj ? (roomObj.name || roomObj.nom) : ''
+        };
+        state.wishes[`${agent.matricule}_${v.jour}`] = wishData;
+        if (agent.id) state.wishes[`${agent.id}_${v.jour}`] = wishData;
+      });
+    }
+
+    // 6. Rendu final
     state.ui.isHydrated = true;
     renderAll();
     console.log("Données initialisées depuis la BD avec succès !");
@@ -363,13 +389,19 @@ registerListener(() => {
   renderLeaveTable();
   renderHolidaysTable();
   renderRooms();
+  renderRoomsUnavailability();
   renderRestitution();
   renderExtDutyTab();
   initDatePickers();
 });
 
 // ---------- Démarrage de l'Application ----------
-document.addEventListener('DOMContentLoaded', () => {
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    seedAndLoadData();
+    setTimeout(initDatePickers, 100);
+  });
+} else {
   seedAndLoadData();
   setTimeout(initDatePickers, 100);
-});
+}
