@@ -19,8 +19,9 @@ env/
 htmlcov/
 
 # ── Base de données ───────────────────────────────────────────
-# data/planning.db est conservé dans le dépôt pour initialiser les données directement après clonage/pull
+data/planning.db
 backend/planning.db
+*.db
 data/*.bak
 data/*_backup*
 data/*_copy*
