@@ -207,11 +207,38 @@ def check_and_migrate_database(db_path: pathlib.Path):
             salle_id INTEGER NOT NULL,
             date DATE NOT NULL,
             periode VARCHAR NOT NULL,
-            PRIMARY KEY (personnel_id, date, periode),
+            PRIMARY KEY (personnel_id, date, periode, salle_id),
             FOREIGN KEY (personnel_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE,
             FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
         );
     """)
+
+    # Migration : si la table PLANNING existe avec l'ancienne PK sans salle_id
+    cur.execute("PRAGMA table_info(PLANNING);")
+    planning_info = {c[1]: c for c in cur.fetchall()}
+    salle_pk_index = planning_info.get("salle_id", (0, "", "", 0, None, 0))[5]
+    if salle_pk_index == 0:
+        print("Migration PLANNING : extension de la clé primaire composite (personnel_id, date, periode, salle_id)...")
+        cur.execute("SELECT personnel_id, salle_id, date, periode FROM PLANNING;")
+        old_planning_rows = cur.fetchall()
+        cur.execute("DROP TABLE PLANNING;")
+        cur.execute("""
+            CREATE TABLE PLANNING (
+                personnel_id INTEGER NOT NULL,
+                salle_id INTEGER NOT NULL,
+                date DATE NOT NULL,
+                periode VARCHAR NOT NULL,
+                PRIMARY KEY (personnel_id, date, periode, salle_id),
+                FOREIGN KEY (personnel_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE,
+                FOREIGN KEY (salle_id) REFERENCES SALLE(id) ON DELETE CASCADE
+            );
+        """)
+        for row in old_planning_rows:
+            cur.execute(
+                "INSERT OR IGNORE INTO PLANNING (personnel_id, salle_id, date, periode) VALUES (?, ?, ?, ?);",
+                row
+            )
+        print(f"  {len(old_planning_rows)} enregistrements PLANNING migrés avec succès.")
 
     # 9. Table VOEU
     cur.execute("""

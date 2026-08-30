@@ -27,7 +27,7 @@ class Planning(Base):
     __tablename__ = "PLANNING"
 
     personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), primary_key=True)
-    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), nullable=False)
+    salle_id = Column(Integer, ForeignKey("SALLE.id", ondelete="CASCADE"), primary_key=True)
     date = Column(Date, primary_key=True, nullable=False)
     periode = Column(String, primary_key=True, nullable=False)
 

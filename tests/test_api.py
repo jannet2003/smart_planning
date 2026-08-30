@@ -266,3 +266,58 @@ def test_salle_besoins_integrated_and_eight_tables_total():
     assert updated_data["min_senior"] == 3
     assert updated_data["max_senior"] == 6
 
+
+def test_senior_assigned_to_multiple_compatible_rooms_same_day():
+    # 1. Créer un senior et deux salles compatibles
+    senior = client.post("/api/personnel", json={"nom": "Dr House", "role": "SENIOR", "matricule": "MAT-HOUSE"}).json()
+    salle_scanner = client.post("/api/salles", json={"nom": "Scanner 1"}).json()
+    salle_radio = client.post("/api/salles", json={"nom": "Radio 1"}).json()
+
+    # 2. Sauvegarde unitaire : les deux affectations doivent réussir le même jour
+    res1 = client.post("/api/planning", json={
+        "personnel_id": senior["id"],
+        "salle_id": salle_scanner["id"],
+        "date": "2026-09-01",
+        "periode": "jour"
+    })
+    assert res1.status_code == 200
+
+    res2 = client.post("/api/planning", json={
+        "personnel_id": senior["id"],
+        "salle_id": salle_radio["id"],
+        "date": "2026-09-01",
+        "periode": "jour"
+    })
+    assert res2.status_code == 200
+
+    # 3. Vérification en base via GET /api/planning/
+    all_plannings = client.get("/api/planning").json()
+    senior_records = [p for p in all_plannings if p["personnel_id"] == senior["id"] and p["date"] == "2026-09-01"]
+    assert len(senior_records) == 2
+    room_ids = {p["salle_id"] for p in senior_records}
+    assert room_ids == {salle_scanner["id"], salle_radio["id"]}
+
+    # 4. Vérification via sauvegarde hebdomadaire (batch) avec additionalSeniorAssignments
+    weekly_payload = {
+        "semaine_code": "2026-09-07",
+        "affectations": {
+            "datesList": ["2026-09-07", "2026-09-08", "2026-09-09", "2026-09-10", "2026-09-11", "2026-09-12", "2026-09-13"],
+            "gridAssignments": {
+                f"{senior['matricule']}_2026-09-07": "Scanner 1",
+            },
+            "additionalSeniorAssignments": {
+                f"{senior['matricule']}_2026-09-07": ["Radio 1"],
+            },
+            "nightAssignments": {}
+        }
+    }
+    save_batch_res = client.post("/api/planning", json=weekly_payload)
+    assert save_batch_res.status_code == 200
+    assert save_batch_res.json()["status"] == "success"
+
+    # Vérifier que les 2 salles sont persistées pour le 2026-09-07
+    get_week = client.get("/api/planning/2026-09-07").json()
+    week_senior_records = [p for p in get_week if p["personnel_id"] == senior["id"] and p["date"] == "2026-09-07"]
+    assert len(week_senior_records) == 2
+    assert {p["salle_id"] for p in week_senior_records} == {salle_scanner["id"], salle_radio["id"]}
+
