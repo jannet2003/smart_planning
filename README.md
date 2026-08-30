@@ -1,85 +1,74 @@
 # SmartPlanning Radiologie
 
-SmartPlanning Radiologie est une application web de gestion du personnel, des salles et des plannings destinée à un service de radiologie. Elle a été conçue pour centraliser la planification des agents, suivre les disponibilités, gérer les salles d’examen et faciliter la constitution de plannings cohérents et exploitables au quotidien.
-
-## Présentation du projet
-
-Ce projet a pour objectif de proposer une solution simple, pratique et fonctionnelle pour l’organisation quotidienne d’un service de radiologie. L’application permet notamment de :
-
-- gérer les agents du personnel avec leurs statuts et catégories,
-- organiser les salles d’examen et leurs contraintes,
-- gérer les congés et les indisponibilités,
-- générer et sauvegarder des plannings hebdomadaires,
-- consulter les archives de planning pour une meilleure traçabilité.
+SmartPlanning Radiologie est une application web de gestion du personnel, des salles et des plannings destinée à un service de radiologie. Elle centralise la planification des agents, suit les disponibilités, gère les salles d'examen et facilite la constitution de plannings cohérents au quotidien.
 
 ## Architecture et technologies
 
-Le projet a été développé avec une approche modulaire et progressive :
-
-- Backend : FastAPI + SQLAlchemy + Pydantic
-- Base de données : SQLite
-- Frontend : HTML, CSS et JavaScript natif
-- Tests : pytest
-
-Cette séparation permet de garder une logique claire entre l’API, la logique métier et l’interface utilisateur.
-
-## Méthodes et modèles de travail
-
-Le développement du projet a suivi une méthodologie pragmatique basée sur :
-
-- l’analyse fonctionnelle des besoins métier,
-- la modélisation des entités principales (personnel, salles, planning),
-- la mise en place d’une API robuste et testée,
-- l’itération sur l’interface pour améliorer l’expérience utilisateur,
-- la validation par des tests automatisés pour limiter les régressions.
-
-Le travail a été organisé autour de plusieurs axes :
-
-1. Structure et stabilité du backend
-2. Gestion des données et de la persistance
-3. Amélioration de l’interface utilisateur
-4. Correction des erreurs de logique métier
-5. Organisation du code pour une meilleure maintenabilité
+| Composant | Technologie |
+|-----------|-------------|
+| Backend | FastAPI + SQLAlchemy + Pydantic |
+| Base de données | SQLite |
+| Frontend | HTML, CSS et JavaScript natif |
+| Tests | pytest |
+| Serveur Web | Uvicorn + Nginx (reverse-proxy) |
 
 ## Structure du projet
 
 ```text
-backend/
-  app/
-    api/            # routes FastAPI
-    core/           # configuration
-    db/             # base de données et session SQLAlchemy
-    models/         # modèles ORM
-    schemas/        # schémas Pydantic
-    main.py         # application FastAPI
-frontend/
-  public/          # fichiers statiques HTML/CSS
-  src/             # logique JavaScript du frontend
-tests/
-  test_api.py      # tests pytest du backend
+smart_planning/
+├── backend/
+│   ├── app/
+│   │   ├── api/            # Routes FastAPI
+│   │   ├── core/           # Configuration (config.py)
+│   │   ├── db/             # Session SQLAlchemy + init_db
+│   │   ├── models/         # Modèles ORM SQLAlchemy
+│   │   ├── schemas/        # Schémas Pydantic
+│   │   └── main.py         # Point d'entrée FastAPI
+│   └── requirements.txt
+├── frontend/
+│   └── public/             # HTML, CSS et JS (servis par FastAPI)
+│       ├── index.html
+│       ├── css/
+│       └── src/
+├── data/                   # Base de données SQLite (créée au 1er démarrage)
+├── tests/
+│   └── test_api.py
+├── deploy/                 # Fichiers de déploiement VPS
+│   ├── setup.sh            # Script d'installation automatique
+│   ├── smartplanning.service  # Service systemd
+│   └── nginx.conf          # Configuration Nginx
+├── .env.example            # Template de variables d'environnement
+└── requirements.txt
 ```
 
-## Installation
+---
 
-Depuis la racine du projet :
+## Installation locale (développement)
 
 ```bash
+# 1. Cloner le dépôt
+git clone https://github.com/jannet2003/smart_planning.git
+cd smart_planning
+
+# 2. Créer et activer l'environnement virtuel
 python -m venv .venv
+# Windows
 .\.venv\Scripts\Activate.ps1
+# Linux / macOS
+source .venv/bin/activate
+
+# 3. Installer les dépendances
 pip install -r backend/requirements.txt
-```
 
-## Lancer l’API FastAPI
-
-```bash
+# 4. Lancer le serveur de développement
 cd backend
 uvicorn app.main:app --reload
 ```
 
-L’API sera disponible sur :
-
-- http://127.0.0.1:8000
-- Documentation Swagger : http://127.0.0.1:8000/docs
+L'application est disponible sur :
+- **App** : http://127.0.0.1:8000
+- **Swagger UI** : http://127.0.0.1:8000/docs
+- **ReDoc** : http://127.0.0.1:8000/redoc
 
 ## Tests
 
@@ -87,7 +76,82 @@ L’API sera disponible sur :
 pytest -q
 ```
 
+---
+
+## Déploiement sur VPS Ubuntu
+
+### Prérequis
+
+- VPS Ubuntu 20.04+ avec accès root/sudo
+- Git installé
+
+### Installation automatique
+
+```bash
+# 1. Cloner le dépôt sur le serveur
+git clone https://github.com/jannet2003/smart_planning.git /srv/smartplanning
+cd /srv/smartplanning
+
+# 2. Lancer le script d'installation (installe tout automatiquement)
+sudo bash deploy/setup.sh
+```
+
+Le script effectue automatiquement :
+- Installation de Python 3, Nginx, Git
+- Création d'un utilisateur système `smartplanning`
+- Création du venv et installation des dépendances
+- Configuration du service systemd (`smartplanning.service`)
+- Configuration de Nginx (reverse-proxy vers Uvicorn)
+
+### Configuration de l'environnement
+
+```bash
+# Copier le template et adapter les valeurs
+cp .env.example .env
+nano .env
+```
+
+### Gestion du service
+
+```bash
+# Démarrer / arrêter / redémarrer
+sudo systemctl start smartplanning
+sudo systemctl stop smartplanning
+sudo systemctl restart smartplanning
+
+# Voir les logs en temps réel
+sudo journalctl -u smartplanning -f
+
+# Statut
+sudo systemctl status smartplanning
+```
+
+### Mise à jour de l'application
+
+```bash
+cd /srv/smartplanning
+git pull origin main
+sudo systemctl restart smartplanning
+```
+
+### (Optionnel) HTTPS avec Let's Encrypt
+
+```bash
+sudo apt-get install certbot python3-certbot-nginx -y
+sudo certbot --nginx -d mondomaine.fr
+```
+
+---
+
+## Fonctionnalités
+
+- Gestion des agents du personnel (statuts, catégories, matricules)
+- Organisation des salles d'examen
+- Gestion des congés et indisponibilités
+- Gestion des vœux et préférences
+- Génération et sauvegarde de plannings hebdomadaires
+- Consultation des archives de planning
+
 ## État du projet
 
-Le projet est actuellement fonctionnel avec une version stable de l’API et une interface de gestion du planning prête à être utilisée et à évoluer.
-
+Le projet est fonctionnel avec une API stable et une interface de gestion du planning opérationnelle.

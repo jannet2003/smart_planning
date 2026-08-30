@@ -1,0 +1,29 @@
+[Unit]
+Description=SmartPlanning Radiologie — FastAPI via Uvicorn
+After=network.target
+
+[Service]
+Type=simple
+User=smartplanning
+Group=smartplanning
+WorkingDirectory=/srv/smartplanning/backend
+
+# Charger les variables d'environnement depuis le fichier .env à la racine
+EnvironmentFile=/srv/smartplanning/.env
+
+# Démarrage de l'application via le venv isolé
+ExecStart=/srv/smartplanning/.venv/bin/uvicorn app.main:app \
+    --host 127.0.0.1 \
+    --port 8000 \
+    --workers 1
+
+# Redémarrage automatique en cas de crash
+Restart=on-failure
+RestartSec=5s
+
+# Sécurité : limiter les droits du processus
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

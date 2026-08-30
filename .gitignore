@@ -1,38 +1,54 @@
-# Environnement virtuel Python
-.venv/
+# =============================================================
+# SmartPlanning Radiologie — .gitignore
+# =============================================================
 
-# Fichiers compilés Python
+# ── Environnement virtuel Python ──────────────────────────────
+.venv/
+venv/
+env/
+
+# ── Fichiers compilés Python ──────────────────────────────────
 **/__pycache__/
 *.py[cod]
 *.pyo
 *.pyc
 
-# Fichiers cache pytest
+# ── Tests ─────────────────────────────────────────────────────
 .pytest_cache/
+.coverage
+htmlcov/
 
-# Base de données locale - on garde data/planning.db dans le repo
-# pour que le projet soit utilisable directement après clonage
-backend/planning.db
+# ── Base de données ───────────────────────────────────────────
+# La DB est créée automatiquement au 1er démarrage via init_db()
+# Ne pas versionner les données de production
+data/planning.db
 data/*.bak
 data/*_backup*
 data/*_copy*
+*.db-shm
+*.db-wal
 
-# Dossier généré par le sous-module / clone interne
-radiologie-planning/
+# ── Variables d'environnement (JAMAIS commiter .env) ─────────
+.env
+.env.local
+.env.production
 
-# Fichiers de configuration IDE
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Fichiers PID / runtime ───────────────────────────────────
+*.pid
+
+# ── IDE ───────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.suo
 *.user
 
-# Logs
-*.log
+# ── Sous-module / clone interne (obsolète) ───────────────────
+radiologie-planning/
 
-# Variables d'environnement
-.env
-.env.local
-
-# Fichiers temporaires Office
+# ── Fichiers temporaires Office ───────────────────────────────
 *.docx
 ~$*
