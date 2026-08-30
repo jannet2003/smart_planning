@@ -32,3 +32,7 @@ radiologie-planning/
 # Variables d'environnement
 .env
 .env.local
+
+# Fichiers temporaires Office
+*.docx
+~$*

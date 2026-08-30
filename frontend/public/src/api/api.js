@@ -1,14 +1,16 @@
 // Détermination dynamique de l'URL de base de l'API
 const BASE_URL = (() => {
-  if (typeof window === 'undefined') return 'http://localhost:8000/api';
+  if (typeof window === 'undefined') return 'http://localhost:8101/api';
   
-  // Si servi par FastAPI directement (ex: http://localhost:8000 ou 8011), utiliser le chemin relatif /api
-  if (window.location.protocol.startsWith('http') && window.location.port && window.location.port !== '5500' && window.location.port !== '5501') {
+  // Si l'application est servie directement par le backend FastAPI sur le port 8101 ou via un reverse proxy standard (80/443)
+  if (window.location.protocol.startsWith('http') && (window.location.port === '8101' || !window.location.port || window.location.port === '80' || window.location.port === '443')) {
     return '/api';
   }
   
-  // Si ouvert via Live Server (port 5500) ou fichier local, pointer vers le port 8000 de debug (ou 8011 si spécifié)
-  return window.location.port === '8011' ? 'http://localhost:8011/api' : 'http://localhost:8000/api';
+  // Si ouvert via Live Server (port 5500, etc.) ou fichier local, pointer dynamiquement vers l'hôte sur le port 8101
+  const hostname = window.location.hostname || 'localhost';
+  const protocol = window.location.protocol.startsWith('http') ? window.location.protocol : 'http:';
+  return `${protocol}//${hostname}:8101/api`;
 })();
 
 export async function fetchPersonnel() {

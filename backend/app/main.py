@@ -26,17 +26,13 @@ app.add_middleware(
 # Routeur principal de l'API
 app.include_router(api_router, prefix="/api")
 
-# Servir le dossier Front-End
-# BASE_DIR pointe vers la racine de 'backend/'
+# Servir le dossier Front-End (frontend/public contient index.html, css/ et src/)
 BASE_DIR = Path(__file__).resolve().parent.parent
-FRONTEND_DIR = os.path.join(BASE_DIR.parent, "frontend")
+FRONTEND_PUBLIC = os.path.join(BASE_DIR.parent, "frontend", "public")
 
-if os.path.exists(FRONTEND_DIR):
-    # Permet de servir le code source JavaScript (/src/...)
-    app.mount("/src", StaticFiles(directory=os.path.join(FRONTEND_DIR, "src")), name="src")
-    # Permet de servir les fichiers publics (HTML, CSS sur /)
-    app.mount("/", StaticFiles(directory=os.path.join(FRONTEND_DIR, "public"), html=True), name="public")
+if os.path.exists(FRONTEND_PUBLIC):
+    app.mount("/", StaticFiles(directory=FRONTEND_PUBLIC, html=True), name="public")
 else:
     @app.get("/")
     def read_root():
-        return {"status": "API opérationnelle. Le dossier frontend n'a pas été trouvé."}
+        return {"status": "API opérationnelle. Le dossier frontend/public n'a pas été trouvé."}
