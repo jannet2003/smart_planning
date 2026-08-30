@@ -19,9 +19,8 @@ env/
 htmlcov/
 
 # ── Base de données ───────────────────────────────────────────
-# La DB est créée automatiquement au 1er démarrage via init_db()
-# Ne pas versionner les données de production
-data/planning.db
+# data/planning.db est conservé dans le dépôt pour initialiser les données directement après clonage/pull
+backend/planning.db
 data/*.bak
 data/*_backup*
 data/*_copy*
