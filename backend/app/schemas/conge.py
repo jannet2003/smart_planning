@@ -17,4 +17,6 @@ class CongeCreate(CongeBase):
 
 
 class CongeResponse(CongeBase):
+    id: int
+
     model_config = ConfigDict(from_attributes=True)

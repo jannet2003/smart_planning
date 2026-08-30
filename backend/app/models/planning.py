@@ -6,8 +6,9 @@ from app.db.database import Base
 class Conge(Base):
     __tablename__ = "CONGE"
 
-    personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), primary_key=True)
-    type_conge = Column(String, primary_key=True, nullable=False)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    personnel_id = Column(Integer, ForeignKey("PERSONNEL.id", ondelete="CASCADE"), nullable=False, index=True)
+    type_conge = Column(String, nullable=False)
     date_debut = Column(Date, nullable=False)
     date_fin = Column(Date, nullable=False)
     raison = Column(String, nullable=True)

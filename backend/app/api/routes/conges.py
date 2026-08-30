@@ -34,7 +34,10 @@ def create_conge(data: CongeCreate, db: Session = Depends(get_db)):
 
 @router.delete("/{personnel_id}/{type_conge}", status_code=204)
 def delete_conge(personnel_id: int, type_conge: str, db: Session = Depends(get_db)):
-    item = db.get(Conge, {"personnel_id": personnel_id, "type_conge": type_conge})
+    item = db.query(Conge).filter(
+        Conge.personnel_id == personnel_id,
+        Conge.type_conge == type_conge
+    ).first()
     if item is None:
         raise HTTPException(status_code=404, detail="Congé non trouvé")
     db.delete(item)

@@ -141,18 +141,45 @@ def check_and_migrate_database(db_path: pathlib.Path):
         cur.execute("ALTER TABLE INDISPONIBILITE_SALLE ADD COLUMN type_indisponibilite VARCHAR DEFAULT 'maintenance';")
         print("Colonne type_indisponibilite ajoutée à INDISPONIBILITE_SALLE.")
 
-    # 5. Table CONGE
+    # 5. Table CONGE (avec id INTEGER PRIMARY KEY AUTOINCREMENT depuis v2)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS CONGE (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             personnel_id INTEGER NOT NULL,
             type_conge VARCHAR NOT NULL,
             date_debut DATE NOT NULL,
             date_fin DATE NOT NULL,
             raison VARCHAR,
-            PRIMARY KEY (personnel_id, type_conge),
             FOREIGN KEY (personnel_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE
         );
     """)
+
+    # Migration : si la table CONGE existait avec l'ancienne PK composite (personnel_id, type_conge)
+    # sans colonne id, on recrée la table et on réinsère les données avec un id auto-généré
+    cur.execute("PRAGMA table_info(CONGE);")
+    conge_cols = [c[1] for c in cur.fetchall()]
+    if "id" not in conge_cols:
+        print("Migration CONGE : passage de la PK composite à id INTEGER PRIMARY KEY AUTOINCREMENT...")
+        cur.execute("SELECT personnel_id, type_conge, date_debut, date_fin, raison FROM CONGE;")
+        old_conge_rows = cur.fetchall()
+        cur.execute("DROP TABLE CONGE;")
+        cur.execute("""
+            CREATE TABLE CONGE (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                personnel_id INTEGER NOT NULL,
+                type_conge VARCHAR NOT NULL,
+                date_debut DATE NOT NULL,
+                date_fin DATE NOT NULL,
+                raison VARCHAR,
+                FOREIGN KEY (personnel_id) REFERENCES PERSONNEL(id) ON DELETE CASCADE
+            );
+        """)
+        for row in old_conge_rows:
+            cur.execute(
+                "INSERT INTO CONGE (personnel_id, type_conge, date_debut, date_fin, raison) VALUES (?, ?, ?, ?, ?);",
+                row
+            )
+        print(f"  {len(old_conge_rows)} congés migrés avec succès.")
 
     # 6. Table JOUR_FERIE
     cur.execute("""
