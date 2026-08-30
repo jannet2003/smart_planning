@@ -195,10 +195,10 @@ def test_indisponibilite_salle_lifecycle():
 
 
 def test_feries_and_personnel_filters():
-    # Test feries router
-    f_res = client.post("/api/feries/", json={"date": "2026-11-01", "libelle": "Toussaint"})
+    # Test jours-feries router (route réelle utilisée par le frontend)
+    f_res = client.post("/api/jours-feries/", json={"date": "2026-11-01", "libelle": "Toussaint"})
     assert f_res.status_code == 200
-    get_f = client.get("/api/feries/2026-11-01")
+    get_f = client.get("/api/jours-feries/2026-11-01")
     assert get_f.status_code == 200
     assert get_f.json()["libelle"] == "Toussaint"
 

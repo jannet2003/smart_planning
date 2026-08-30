@@ -17,6 +17,14 @@ def get_jours_feries(db: Session = Depends(get_db)):
     return db.query(JourFerie).order_by(JourFerie.date).all()
 
 
+@router.get("/{jour}", response_model=JourFerieResponse)
+def get_jour_ferie(jour: date, db: Session = Depends(get_db)):
+    item = db.get(JourFerie, jour)
+    if not item:
+        raise HTTPException(status_code=404, detail="Jour férié non trouvé")
+    return item
+
+
 @router.post("", response_model=JourFerieResponse)
 @router.post("/", response_model=JourFerieResponse, include_in_schema=False)
 def create_jour_ferie(data: JourFerieCreate, db: Session = Depends(get_db)):
