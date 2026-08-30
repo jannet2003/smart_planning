@@ -10,11 +10,30 @@ async function refreshLeavesFromApi() {
     const staff = state.staff.find(item => item.id === conge.personnel_id);
     if (!staff) return;
     if (conge.type_conge === 'ete') {
-      state.leaves.summer[staff.matricule] = { start: conge.date_debut, personnelId: staff.id };
+      state.leaves.summer[staff.matricule] = { id: conge.id, start: conge.date_debut, personnelId: staff.id };
     } else {
-      state.leaves.flex.push({ id: conge.type_conge, personnelId: staff.id, staffId: staff.matricule, start: conge.date_debut, end: conge.date_fin, reason: conge.raison || 'Sans objet' });
+      state.leaves.flex.push({ id: conge.id, type: conge.type_conge, personnelId: staff.id, staffId: staff.matricule, start: conge.date_debut, end: conge.date_fin, reason: conge.raison || 'Sans objet' });
     }
   });
+}
+
+export async function deleteLeave(congeId, matricule) {
+  if (!congeId) return;
+  try {
+    await api.deleteConge(congeId);
+    await refreshLeavesFromApi();
+    if (window.syncLeavesAndHolidaysIntoSchedule) {
+      window.syncLeavesAndHolidaysIntoSchedule();
+    }
+    renderAll();
+    if (matricule) {
+      openModal(matricule);
+    }
+    if (window.toast) window.toast('✓ Congé supprimé avec succès');
+  } catch (error) {
+    console.error(error);
+    if (window.toast) window.toast('🛑 Erreur de suppression du congé');
+  }
 }
 
 export function initLeaves() {
@@ -29,6 +48,7 @@ export function initLeaves() {
   window.submitLeave = submitLeave;
   window.addFlexLeave = submitLeave;
   window.assignSummerBlock = submitLeave;
+  window.deleteLeave = deleteLeave;
   window.checkLimitAlert = checkLimitAlert;
   window.openModal = openModal;
   window.closeModal = closeModal;
@@ -50,6 +70,7 @@ window.onLeaveDateChange = onLeaveDateChange;
 window.submitLeave = submitLeave;
 window.addFlexLeave = submitLeave;
 window.assignSummerBlock = submitLeave;
+window.deleteLeave = deleteLeave;
 window.checkLimitAlert = checkLimitAlert;
 window.openModal = openModal;
 window.closeModal = closeModal;
@@ -233,7 +254,10 @@ export async function submitLeave() {
   if (leaveType === 'radiologie' || leaveType === 'ete') {
     end = dateAdd(start, 29);
     try {
-      await api.deleteConge(staff.id, 'ete').catch(() => undefined);
+      const existingSummer = state.leaves?.summer?.[staff.matricule];
+      if (existingSummer && existingSummer.id) {
+        await api.deleteConge(existingSummer.id).catch(() => undefined);
+      }
       await api.createConge({ personnel_id: staff.id, type_conge: 'ete', date_debut: start, date_fin: end, raison: 'Congé radiologie (Bloc 30j)' });
       await refreshLeavesFromApi();
     } catch (error) { window.toast('🛑 Erreur d’enregistrement du congé de radiologie'); return; }
@@ -288,11 +312,30 @@ export function openModal(matricule) {
   hList.innerHTML = '';
   let listItems = [];
   const sb = state.leaves.summer[matricule];
-  if (sb) listItems.push(`<div class="history-item"><div class="dates"><span> Bloc de 30 jours </span><span>Du ${formatDateDMY(sb.start)} au ${formatDateDMY(dateAdd(sb.start, 29))}</span></div></div>`);
+  if (sb) {
+    listItems.push(`
+      <div class="history-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px; margin-bottom:8px; background:var(--panel-2); border-radius:6px; border:1px solid var(--border);">
+        <div class="dates">
+          <span style="font-weight:700; color:var(--accent-blue-dark);">🏖️ Bloc de 30 jours (Été)</span><br>
+          <span style="font-size:12px; color:var(--text-dim);">Du ${formatDateDMY(sb.start)} au ${formatDateDMY(dateAdd(sb.start, 29))}</span>
+        </div>
+        ${sb.id ? `<button class="btn danger" type="button" style="padding:5px 10px; font-size:12px; cursor:pointer;" onclick="deleteLeave(${sb.id}, '${matricule}')" title="Supprimer ce congé">🗑 Supprimer</button>` : ''}
+      </div>
+    `);
+  }
   state.leaves.flex.filter(l => l.staffId === matricule).forEach(l => {
-    listItems.push(`<div class="history-item"><div class="dates"><span> Congé Flexible (${rangeLen(l.start, l.end)}j)</span><span>Du ${formatDateDMY(l.start)} au ${formatDateDMY(l.end)}</span></div>${l.reason && l.reason !== 'Sans objet' ? `<div class="reason"><b>Motif :</b> ${l.reason}</div>` : ''}</div>`);
+    listItems.push(`
+      <div class="history-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px; margin-bottom:8px; background:var(--panel-2); border-radius:6px; border:1px solid var(--border);">
+        <div class="dates">
+          <span style="font-weight:700; color:var(--accent-blue);">🌴 Congé Flexible (${rangeLen(l.start, l.end)}j)</span><br>
+          <span style="font-size:12px; color:var(--text-dim);">Du ${formatDateDMY(l.start)} au ${formatDateDMY(l.end)}</span>
+          ${l.reason && l.reason !== 'Sans objet' ? `<div class="reason" style="font-size:11.5px; margin-top:2px; color:var(--text-dim);"><b>Motif :</b> ${l.reason}</div>` : ''}
+        </div>
+        ${l.id ? `<button class="btn danger" type="button" style="padding:5px 10px; font-size:12px; cursor:pointer;" onclick="deleteLeave(${l.id}, '${matricule}')" title="Supprimer ce congé">🗑 Supprimer</button>` : ''}
+      </div>
+    `);
   });
-  hList.innerHTML = listItems.length === 0 ? `<p style="font-size:12px; color:var(--text-faint); text-align:center;">Aucun congé enregistré.</p>` : listItems.join('');
+  hList.innerHTML = listItems.length === 0 ? `<p style="font-size:12px; color:var(--text-faint); text-align:center; padding:16px;">Aucun congé enregistré.</p>` : listItems.join('');
   const modal = document.getElementById('history-modal');
   if (modal) {
     modal.classList.add('active');

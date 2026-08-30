@@ -179,8 +179,8 @@ async function seedAndLoadData() {
     dbConges.forEach(conge => {
       const staff = state.staff.find(s => s.id === conge.personnel_id);
       if (!staff) return;
-      if (conge.type_conge === 'ete') state.leaves.summer[staff.matricule] = { start: conge.date_debut, personnelId: staff.id };
-      else state.leaves.flex.push({ id: conge.type_conge, personnelId: staff.id, staffId: staff.matricule, start: conge.date_debut, end: conge.date_fin, reason: conge.raison || 'Sans objet' });
+      if (conge.type_conge === 'ete') state.leaves.summer[staff.matricule] = { id: conge.id, start: conge.date_debut, personnelId: staff.id };
+      else state.leaves.flex.push({ id: conge.id, type: conge.type_conge, personnelId: staff.id, staffId: staff.matricule, start: conge.date_debut, end: conge.date_fin, reason: conge.raison || 'Sans objet' });
     });
 
     const dbJoursFeries = await safeJson(() => api.fetchJoursFeries(), []);

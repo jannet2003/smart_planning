@@ -157,8 +157,8 @@ export async function createConge(conge) {
   return res.json();
 }
 
-export async function deleteConge(personnelId, typeConge) {
-  const res = await fetch(`${BASE_URL}/conges/${personnelId}/${encodeURIComponent(typeConge)}`, { method: 'DELETE' });
+export async function deleteConge(congeId) {
+  const res = await fetch(`${BASE_URL}/conges/${congeId}`, { method: 'DELETE' });
   if (!res.ok) throw new Error("Erreur de suppression du congé");
 }
 

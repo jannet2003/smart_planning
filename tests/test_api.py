@@ -321,3 +321,48 @@ def test_senior_assigned_to_multiple_compatible_rooms_same_day():
     assert len(week_senior_records) == 2
     assert {p["salle_id"] for p in week_senior_records} == {salle_scanner["id"], salle_radio["id"]}
 
+
+def test_create_and_delete_conge_by_id():
+    personnel = client.post("/api/personnel", json={"nom": "Dr Dupont", "role": "SENIOR"}).json()
+    pid = personnel["id"]
+
+    # Création de deux congés pour le même agent
+    c1 = client.post("/api/conges", json={
+        "personnel_id": pid,
+        "type_conge": "ete",
+        "date_debut": "2026-07-01",
+        "date_fin": "2026-07-30",
+        "raison": "Congé annuel"
+    }).json()
+    assert "id" in c1
+    c1_id = c1["id"]
+
+    c2 = client.post("/api/conges", json={
+        "personnel_id": pid,
+        "type_conge": "flexible_123",
+        "date_debut": "2026-09-10",
+        "date_fin": "2026-09-15",
+        "raison": "Formation"
+    }).json()
+    assert "id" in c2
+    c2_id = c2["id"]
+
+    # Vérifier qu'il y a 2 congés
+    list_res = client.get("/api/conges").json()
+    agent_conges = [c for c in list_res if c["personnel_id"] == pid]
+    assert len(agent_conges) == 2
+
+    # Supprimer spécifiquement le premier congé par son ID
+    del_res = client.delete(f"/api/conges/{c1_id}")
+    assert del_res.status_code == 204
+
+    # Vérifier qu'il ne reste que le 2ème congé
+    list_after = client.get("/api/conges").json()
+    agent_conges_after = [c for c in list_after if c["personnel_id"] == pid]
+    assert len(agent_conges_after) == 1
+    assert agent_conges_after[0]["id"] == c2_id
+
+    # Supprimer un ID inexistant doit renvoyer 404
+    del_404 = client.delete(f"/api/conges/{c1_id}")
+    assert del_404.status_code == 404
+
