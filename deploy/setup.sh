@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================
+# NON UTILISÉ — L'installation réelle est documentée dans README.md
+# (deux services séparés : smart-planning-backend port 8101,
+#  smart-planning-frontend port 5701, sans Nginx, sans reverse-proxy)
+# Ce script a été créé pour une architecture différente (/srv/smartplanning
+# + Nginx + service unique) qui n'est pas utilisée en production.
+# =============================================================
 # SmartPlanning Radiologie — Script d'installation VPS Ubuntu
 # Usage : sudo bash deploy/setup.sh
 # =============================================================
