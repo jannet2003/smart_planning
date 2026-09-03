@@ -70,13 +70,21 @@ def _normalize_salle_payload(item: Salle):
         "broken_start": str(ref.date_debut) if ref else "",
         "broken_end": str(ref.date_fin) if ref else "",
         "broken_reason": ref.raison if ref else "",
+        # Disponibilité par créneaux
+        "ouvert_matin_semaine":      bool(item.ouvert_matin_semaine)      if item.ouvert_matin_semaine      is not None else True,
+        "ouvert_apres_midi_semaine": bool(item.ouvert_apres_midi_semaine) if item.ouvert_apres_midi_semaine is not None else True,
+        "ouvert_nuit_semaine":       bool(item.ouvert_nuit_semaine)       if item.ouvert_nuit_semaine       is not None else True,
+        "ouvert_samedi_matin":       bool(item.ouvert_samedi_matin)       if item.ouvert_samedi_matin       is not None else True,
+        "ouvert_samedi_apres_midi":  bool(item.ouvert_samedi_apres_midi)  if item.ouvert_samedi_apres_midi  is not None else True,
+        "ouvert_samedi_nuit":        bool(item.ouvert_samedi_nuit)        if item.ouvert_samedi_nuit        is not None else True,
+        "ouvert_dimanche":           bool(item.ouvert_dimanche)           if item.ouvert_dimanche           is not None else True,
         # Liste complète des indisponibilités
         "indisponibilites": [_format_indispo(i) for i in sorted_indispos],
     }
 
 
 def _sync_salle_details(item: Salle, payload, db: Session):
-    """Met à jour uniquement les capacités (min/max). Les indisponibilités sont gérées séparément."""
+    """Met à jour les capacités (min/max) et les créneaux d'ouverture. Les indisponibilités sont gérées séparément."""
     for key in [
         "min_senior",
         "max_senior",
@@ -89,6 +97,20 @@ def _sync_salle_details(item: Salle, payload, db: Session):
     ]:
         if key in payload and payload[key] is not None:
             setattr(item, key, int(payload[key]))
+
+    # Colonnes booléennes d'ouverture par créneau
+    creneau_fields = [
+        "ouvert_matin_semaine",
+        "ouvert_apres_midi_semaine",
+        "ouvert_nuit_semaine",
+        "ouvert_samedi_matin",
+        "ouvert_samedi_apres_midi",
+        "ouvert_samedi_nuit",
+        "ouvert_dimanche",
+    ]
+    for key in creneau_fields:
+        if key in payload and payload[key] is not None:
+            setattr(item, key, bool(payload[key]))
 
 
 def _sync_salle_compatibility(item: Salle, senior_mode: str, compatible_rooms_raw: Optional[str], db: Session):

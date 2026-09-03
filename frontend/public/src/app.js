@@ -2,7 +2,7 @@ import { state, registerListener, renderAll } from './state.js';
 import * as api from './api/api.js';
 import { formatDateDMY } from './utils/helpers.js';
 import { initStaff, renderStaffTable, populateStaffSelects } from './components/staff.js';
-import { initRooms, renderRooms, renderRoomsUnavailability, apiRoomToLocal } from './components/rooms.js';
+import { initRooms, renderRooms, renderRoomsUnavailability, renderRoomsCreneaux, apiRoomToLocal } from './components/rooms.js';
 import { initLeaves, renderLeaveTable, totalLeaveDays, isOnLeave } from './components/leaves.js';
 import { initCalendar, renderHolidaysTable } from './components/calendar.js';
 import { initPlanning, renderRestitution, updateArchivesDropdown } from './components/planning.js';
@@ -390,6 +390,7 @@ registerListener(() => {
   renderHolidaysTable();
   renderRooms();
   renderRoomsUnavailability();
+  renderRoomsCreneaux();
   renderRestitution();
   renderExtDutyTab();
   initDatePickers();

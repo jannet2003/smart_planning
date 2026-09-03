@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
   <!-- Feuille de style -->
-  <link rel="stylesheet" href="css/style.css?v=3.0">
+  <link rel="stylesheet" href="css/style.css?v=3.1">
 
   <!-- Librairie XLSX (pour l'import Excel) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -417,6 +417,10 @@
             <span class="subnav-btn-icon">🛠</span>
             <span class="subnav-btn-text">Indisponibilité et maintenance</span>
           </button>
+          <button class="rooms-subnav-btn" data-section="creneaux" onclick="switchRoomsSubSection('creneaux')">
+            <span class="subnav-btn-icon">🕐</span>
+            <span class="subnav-btn-text">Disponibilité par créneaux</span>
+          </button>
         </nav>
       </aside>
 
@@ -484,6 +488,44 @@
                   </tr>
                 </thead>
                 <tbody id="unavail-rooms-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- ════════════════════════════════════════════════════ -->
+        <!-- SECTION 3 : Disponibilité par créneaux              -->
+        <!-- ════════════════════════════════════════════════════ -->
+        <div id="rooms-section-creneaux" class="rooms-subsection">
+          <div class="section-title" style="margin-bottom:16px;">
+            Disponibilité par créneaux
+            <span class="hint">— Configurez à quels créneaux chaque salle est ouverte</span>
+          </div>
+          <div class="panel" style="padding: 16px;">
+            <p style="font-size:13px; color:var(--text-dim); margin-bottom:14px;">
+              Cochez les créneaux pendant lesquels chaque salle est ouverte.
+              La modification est enregistrée immédiatement au clic.
+              Les salles non cochées pour un créneau seront exclues du planning généré ce jour-là.
+            </p>
+            <div class="table-scroll">
+              <table class="rooms-creneaux-table" id="creneaux-rooms-table">
+                <thead>
+                  <tr>
+                    <th rowspan="2" style="width:200px;">Salle</th>
+                    <th colspan="3" class="group-header creneau-group-semaine">Semaine (lun–ven)</th>
+                    <th colspan="3" class="group-header creneau-group-samedi">Samedi</th>
+                    <th rowspan="2" class="group-header creneau-group-dimanche">Dimanche</th>
+                  </tr>
+                  <tr>
+                    <th class="sub-header creneau-group-semaine">Matin</th>
+                    <th class="sub-header creneau-group-semaine">Après-midi</th>
+                    <th class="sub-header creneau-group-semaine">Nuit</th>
+                    <th class="sub-header creneau-group-samedi">Matin</th>
+                    <th class="sub-header creneau-group-samedi">Après-midi</th>
+                    <th class="sub-header creneau-group-samedi">Nuit</th>
+                  </tr>
+                </thead>
+                <tbody id="creneaux-rooms-tbody"></tbody>
               </table>
             </div>
           </div>
@@ -765,7 +807,7 @@
   <div class="toast" id="toast"></div>
 
   <!-- ===== SCRIPT PRINCIPAL (Initialisateur d'application modulaire) ===== -->
-  <script type="module" src="./src/app.js?v=3.2"></script>
+  <script type="module" src="./src/app.js?v=3.3"></script>
 
 </body>
 </html>

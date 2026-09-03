@@ -45,7 +45,14 @@ def check_and_migrate_database(db_path: pathlib.Path):
             min_inf INTEGER NOT NULL DEFAULT 0,
             max_inf INTEGER NOT NULL DEFAULT 1,
             min_tech INTEGER NOT NULL DEFAULT 1,
-            max_tech INTEGER NOT NULL DEFAULT 3
+            max_tech INTEGER NOT NULL DEFAULT 3,
+            ouvert_matin_semaine INTEGER NOT NULL DEFAULT 1,
+            ouvert_apres_midi_semaine INTEGER NOT NULL DEFAULT 1,
+            ouvert_nuit_semaine INTEGER NOT NULL DEFAULT 1,
+            ouvert_samedi_matin INTEGER NOT NULL DEFAULT 1,
+            ouvert_samedi_apres_midi INTEGER NOT NULL DEFAULT 1,
+            ouvert_samedi_nuit INTEGER NOT NULL DEFAULT 1,
+            ouvert_dimanche INTEGER NOT NULL DEFAULT 1
         );
     """)
 
@@ -65,6 +72,21 @@ def check_and_migrate_database(db_path: pathlib.Path):
     for col_name, col_def in besoin_cols.items():
         if col_name not in existing_cols:
             cur.execute(f"ALTER TABLE SALLE ADD COLUMN {col_name} {col_def};")
+
+    # Migration v3 : colonnes de disponibilité par créneaux (défaut 1 = ouvert)
+    creneau_cols = {
+        "ouvert_matin_semaine":     "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_apres_midi_semaine": "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_nuit_semaine":      "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_samedi_matin":      "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_samedi_apres_midi": "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_samedi_nuit":       "INTEGER NOT NULL DEFAULT 1",
+        "ouvert_dimanche":          "INTEGER NOT NULL DEFAULT 1",
+    }
+    for col_name, col_def in creneau_cols.items():
+        if col_name not in existing_cols:
+            cur.execute(f"ALTER TABLE SALLE ADD COLUMN {col_name} {col_def};")
+            print(f"  Colonne {col_name} ajoutée à SALLE (défaut : ouvert).")
 
     # Si BESOIN_SALLE existe, migrer ses valeurs vers SALLE puis supprimer BESOIN_SALLE
     cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='BESOIN_SALLE';")

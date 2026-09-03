@@ -366,3 +366,136 @@ def test_create_and_delete_conge_by_id():
     del_404 = client.delete(f"/api/conges/{c1_id}")
     assert del_404.status_code == 404
 
+
+# ──────────────────────────────────────────────────────────────
+# Tests — Disponibilité par créneaux (feature v3)
+# ──────────────────────────────────────────────────────────────
+
+def test_salle_creneaux_defaults_all_true():
+    """Une salle créée sans specifier les champs ouvert_* doit les avoir tous à True."""
+    res = client.post("/api/salles/", json={"nom": "Salle Créneaux Test"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["ouvert_matin_semaine"]      is True
+    assert data["ouvert_apres_midi_semaine"] is True
+    assert data["ouvert_nuit_semaine"]       is True
+    assert data["ouvert_samedi_matin"]       is True
+    assert data["ouvert_samedi_apres_midi"]  is True
+    assert data["ouvert_samedi_nuit"]        is True
+    assert data["ouvert_dimanche"]           is True
+
+
+def test_salle_creneaux_update_and_read():
+    """
+    Fermer l'après-midi semaine et dimanche, puis vérifier via GET.
+    Les autres créneaux doivent rester à True.
+    """
+    res = client.post("/api/salles/", json={"nom": "Salle Créneau Update"})
+    assert res.status_code == 200
+    salle_id = res.json()["id"]
+
+    update_res = client.put(f"/api/salles/{salle_id}", json={
+        "ouvert_apres_midi_semaine": False,
+        "ouvert_dimanche": False,
+    })
+    assert update_res.status_code == 200
+    updated = update_res.json()
+    assert updated["ouvert_apres_midi_semaine"] is False
+    assert updated["ouvert_dimanche"]           is False
+    # Les autres restent à True
+    assert updated["ouvert_matin_semaine"]      is True
+    assert updated["ouvert_nuit_semaine"]       is True
+    assert updated["ouvert_samedi_matin"]       is True
+
+    # Vérification via GET
+    get_res = client.get(f"/api/salles/{salle_id}")
+    assert get_res.status_code == 200
+    get_data = get_res.json()
+    assert get_data["ouvert_apres_midi_semaine"] is False
+    assert get_data["ouvert_dimanche"]           is False
+    assert get_data["ouvert_matin_semaine"]      is True
+
+
+def test_planning_batch_respects_creneau_ferme_dimanche():
+    """
+    Une salle avec ouvert_dimanche=False ne doit jamais apparaître
+    dans une affectation batch générée un dimanche.
+    2026-08-16 est un dimanche.
+    """
+    personnel = client.post("/api/personnel", json={"nom": "Dr Dimanche", "role": "SENIOR", "matricule": "MAT-DIM"}).json()
+    salle = client.post("/api/salles", json={"nom": "Salle Fermée Dimanche"}).json()
+    salle_id = salle["id"]
+
+    # Fermer la salle le dimanche
+    upd = client.put(f"/api/salles/{salle_id}", json={"ouvert_dimanche": False})
+    assert upd.status_code == 200
+    assert upd.json()["ouvert_dimanche"] is False
+
+    # Tenter d'affecter cette salle un dimanche (2026-08-16) via batch
+    weekly_payload = {
+        "semaine_code": "2026-08-10",
+        "affectations": {
+            "datesList": ["2026-08-10", "2026-08-11", "2026-08-12", "2026-08-13",
+                          "2026-08-14", "2026-08-15", "2026-08-16"],
+            "gridAssignments": {
+                f"{personnel['matricule']}_2026-08-16": "Salle Fermée Dimanche",  # dimanche
+                f"{personnel['matricule']}_2026-08-11": "Salle Fermée Dimanche",  # mardi (doit passer)
+            },
+            "nightAssignments": {},
+        }
+    }
+    save_res = client.post("/api/planning", json=weekly_payload)
+    assert save_res.status_code == 200
+
+    # Récupérer les affectations de la semaine
+    records = client.get("/api/planning/2026-08-10").json()
+    # Le dimanche 16 août ne doit pas apparaître pour cette salle
+    dimanche_records = [
+        r for r in records
+        if r["date"] == "2026-08-16" and r["salle_id"] == salle_id
+    ]
+    assert dimanche_records == [], "La salle fermée le dimanche a quand même été affectée un dimanche!"
+
+    # Le mardi 11 août doit apparaître (la salle est ouverte en semaine)
+    mardi_records = [
+        r for r in records
+        if r["date"] == "2026-08-11" and r["salle_id"] == salle_id
+    ]
+    assert len(mardi_records) == 1, "La salle aurait dû être affectée le mardi (créneau ouvert)"
+
+
+def test_planning_batch_respects_creneau_ferme_apres_midi_semaine():
+    """
+    Une salle avec ouvert_apres_midi_semaine=False mais ouvert_matin_semaine=True
+    doit être affectée le matin (periode='jour') d'un jour de semaine.
+    Note : le filtre batch utilise 'jour' → vérifie ouvert_matin_semaine.
+    """
+    personnel = client.post("/api/personnel", json={
+        "nom": "Dr Aprem", "role": "SENIOR", "matricule": "MAT-APREM"
+    }).json()
+    salle = client.post("/api/salles", json={"nom": "Salle Fermée Aprem"}).json()
+    salle_id = salle["id"]
+
+    # Fermer uniquement l'après-midi semaine
+    client.put(f"/api/salles/{salle_id}", json={"ouvert_apres_midi_semaine": False})
+
+    # Affecter le lundi 2026-08-10 (periode jour → vérifie ouvert_matin_semaine = True)
+    weekly_payload = {
+        "semaine_code": "2026-08-10",
+        "affectations": {
+            "datesList": ["2026-08-10"],
+            "gridAssignments": {
+                f"{personnel['matricule']}_2026-08-10": "Salle Fermée Aprem",
+            },
+            "nightAssignments": {},
+        }
+    }
+    save_res = client.post("/api/planning", json=weekly_payload)
+    assert save_res.status_code == 200
+
+    records = client.get("/api/planning/2026-08-10").json()
+    lundi_records = [r for r in records if r["date"] == "2026-08-10" and r["salle_id"] == salle_id]
+    # Le créneau 'jour' mappe sur ouvert_matin_semaine=True → l'affectation DOIT réussir
+    assert len(lundi_records) == 1, "La salle ouverte le matin de semaine aurait dû être affectée"
+
+

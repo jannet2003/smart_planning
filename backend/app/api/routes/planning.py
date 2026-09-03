@@ -23,6 +23,41 @@ def _payload_from_model(data):
     return data.dict()
 
 
+def _get_creneau_ouvert(salle: "Salle", task_date: "DateType", periode: str) -> bool:
+    """
+    Retourne True si la salle est ouverte pour ce jour et ce créneau.
+    Règles métier :
+      - lun-ven (weekday 0-4) + jour   -> ouvert_matin_semaine
+      - lun-ven (weekday 0-4) + nuit   -> ouvert_nuit_semaine
+      - samedi (weekday 5) + jour      -> ouvert_samedi_matin
+      - samedi (weekday 5) + nuit      -> ouvert_samedi_nuit
+      - dimanche (weekday 6)           -> ouvert_dimanche
+    Le champ ouvert_apres_midi_* est utilisé si la période est 'apres_midi'.
+    """
+    wd = task_date.weekday()  # 0=lundi, 5=samedi, 6=dimanche
+    p = (periode or "").lower()
+
+    if wd == 6:  # dimanche
+        val = salle.ouvert_dimanche
+    elif wd == 5:  # samedi
+        if p == "apres_midi":
+            val = salle.ouvert_samedi_apres_midi
+        elif p in ("nuit", "garde"):
+            val = salle.ouvert_samedi_nuit
+        else:  # jour / matin / défaut
+            val = salle.ouvert_samedi_matin
+    else:  # lundi à vendredi
+        if p == "apres_midi":
+            val = salle.ouvert_apres_midi_semaine
+        elif p in ("nuit", "garde"):
+            val = salle.ouvert_nuit_semaine
+        else:  # jour / matin / défaut
+            val = salle.ouvert_matin_semaine
+
+    # val peut être None si la DB est ancienne (avant migration) — on fail-open
+    return bool(val) if val is not None else True
+
+
 @router.get("/history", response_model=List[PlanningResponse])
 def get_planning_history(db: Session = Depends(get_db)):
     return db.query(Planning).order_by(Planning.date.desc()).all()
@@ -126,6 +161,10 @@ def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
             if not salle:
                 continue
 
+            # Filtre disponibilité par créneau
+            if not _get_creneau_ouvert(salle, task_date, "jour"):
+                continue
+
             is_holiday = db.get(JourFerie, task_date) is not None
             if is_holiday:
                 continue
@@ -173,6 +212,9 @@ def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
                     salle = all_salles_by_id.get(int(r_name)) if str(r_name).isdigit() else None
                 if not salle:
                     continue
+                # Filtre disponibilité par créneau
+                if not _get_creneau_ouvert(salle, task_date, "jour"):
+                    continue
                 existing = db.query(Planning).filter_by(
                     personnel_id=person.id,
                     salle_id=salle.id,
@@ -199,6 +241,9 @@ def save_planning(data: PlanningCreate, db: Session = Depends(get_db)):
                 continue
             default_salle = all_salles_by_name.get("scanner") or db.query(Salle).first()
             if default_salle:
+                # Filtre disponibilité par créneau nuit
+                if not _get_creneau_ouvert(default_salle, task_date, "nuit"):
+                    continue
                 existing = db.query(Planning).filter_by(
                     personnel_id=person.id,
                     salle_id=default_salle.id,

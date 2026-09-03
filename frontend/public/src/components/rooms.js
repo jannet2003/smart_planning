@@ -19,7 +19,9 @@ export function initRooms() {
   window.submitAddRoom              = submitAddRoom;
   window.renderRooms                = renderRooms;
   window.renderRoomsUnavailability  = renderRoomsUnavailability;
+  window.renderRoomsCreneaux        = renderRoomsCreneaux;
   window.updateRoomProp             = updateRoomProp;
+  window.updateRoomCreneau          = updateRoomCreneau;
   window.handleSeniorModeChange     = handleSeniorModeChange;
   window.openCompatibilityModal     = openCompatibilityModal;
   window.closeCompatibilityModal    = closeCompatibilityModal;
@@ -44,7 +46,9 @@ window.closeAddRoomModal          = closeAddRoomModal;
 window.submitAddRoom              = submitAddRoom;
 window.renderRooms                = renderRooms;
 window.renderRoomsUnavailability  = renderRoomsUnavailability;
+window.renderRoomsCreneaux        = renderRoomsCreneaux;
 window.updateRoomProp             = updateRoomProp;
+window.updateRoomCreneau          = updateRoomCreneau;
 window.handleSeniorModeChange     = handleSeniorModeChange;
 window.openCompatibilityModal     = openCompatibilityModal;
 window.closeCompatibilityModal    = closeCompatibilityModal;
@@ -74,8 +78,10 @@ export function switchRoomsSubSection(section) {
 
   const s1 = document.getElementById('rooms-section-capacites');
   const s2 = document.getElementById('rooms-section-indisponibilites');
+  const s3 = document.getElementById('rooms-section-creneaux');
   if (s1) s1.classList.toggle('rooms-subsection-active', section === 'capacites');
   if (s2) s2.classList.toggle('rooms-subsection-active', section === 'indisponibilites');
+  if (s3) s3.classList.toggle('rooms-subsection-active', section === 'creneaux');
 }
 
 // ─────────────────────────────────────────────
@@ -222,7 +228,15 @@ function roomToPayload(room) {
     is_broken:    false,
     broken_start: '',
     broken_end:   '',
-    broken_reason: ''
+    broken_reason: '',
+    // Disponibilité par créneaux
+    ouvert_matin_semaine:      room.ouvertMatinSemaine      !== false,
+    ouvert_apres_midi_semaine: room.ouvertApresMidiSemaine  !== false,
+    ouvert_nuit_semaine:       room.ouvertNuitSemaine        !== false,
+    ouvert_samedi_matin:       room.ouvertSamediMatin        !== false,
+    ouvert_samedi_apres_midi:  room.ouvertSamediApresMidi   !== false,
+    ouvert_samedi_nuit:        room.ouvertSamediNuit         !== false,
+    ouvert_dimanche:           room.ouvertDimanche           !== false,
   };
 }
 
@@ -248,7 +262,15 @@ export function apiRoomToLocal(r) {
     isBroken:     r.is_broken || false,
     brokenStart:  r.broken_start  || '',
     brokenEnd:    r.broken_end    || '',
-    brokenReason: r.broken_reason || ''
+    brokenReason: r.broken_reason || '',
+    // Disponibilité par créneaux (défaut true si absent de l'API)
+    ouvertMatinSemaine:     r.ouvert_matin_semaine      !== false,
+    ouvertApresMidiSemaine: r.ouvert_apres_midi_semaine  !== false,
+    ouvertNuitSemaine:      r.ouvert_nuit_semaine        !== false,
+    ouvertSamediMatin:      r.ouvert_samedi_matin        !== false,
+    ouvertSamediApresMidi:  r.ouvert_samedi_apres_midi   !== false,
+    ouvertSamediNuit:       r.ouvert_samedi_nuit         !== false,
+    ouvertDimanche:         r.ouvert_dimanche            !== false,
   };
 }
 
@@ -878,3 +900,69 @@ export async function deleteUnavailPeriod(periodId, roomId) {
     if (window.toast) window.toast('🛑 Erreur lors de la suppression');
   }
 }
+
+// ─────────────────────────────────────────────
+// SECTION 3 : Disponibilité par créneaux
+// ─────────────────────────────────────────────
+
+/**
+ * Met à jour un champ de disponibilité par créneau sur la salle state.rooms[idx]
+ * et sauvegarde immédiatement en BD (même pattern que updateRoomProp).
+ * @param {number} idx - Index dans state.rooms
+ * @param {string} field - Nom du champ camelCase (ex: 'ouvertMatinSemaine')
+ * @param {boolean} checked - Valeur de la case à cocher
+ */
+export async function updateRoomCreneau(idx, field, checked) {
+  if (!state.rooms || !state.rooms[idx]) return;
+  const room = state.rooms[idx];
+  room[field] = checked;
+
+  try {
+    await persistRoom(room);
+  } catch (err) {
+    console.error('Erreur updateRoomCreneau:', err);
+    if (window.toast) window.toast('🛑 Erreur de sauvegarde de la disponibilité');
+  }
+}
+
+/**
+ * Génère le tableau de disponibilité par créneaux.
+ * Une ligne par salle, 3 groupes de colonnes : Semaine / Samedi / Dimanche.
+ */
+export function renderRoomsCreneaux() {
+  const tbody = document.getElementById('creneaux-rooms-tbody');
+  if (!tbody) return;
+
+  if (!Array.isArray(state.rooms) || state.rooms.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:24px; text-align:center; color:var(--text-dim);">Aucune salle configurée.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = state.rooms.map((room, idx) => {
+    /**
+     * Génère une case à cocher pour un champ de disponibilité donné.
+     * Appel onclick: updateRoomCreneau(idx, 'field', this.checked)
+     */
+    function checkbox(field, value) {
+      const checked = value !== false ? 'checked' : '';
+      return `<input type="checkbox" class="creneau-checkbox" ${checked}
+        title="${checked ? 'Ouvert' : 'Fermé'}"
+        onchange="updateRoomCreneau(${idx}, '${field}', this.checked)">`;
+    }
+
+    return `
+      <tr class="creneau-row">
+        <td class="creneau-td-salle">
+          <strong>${room.name || 'Salle sans nom'}</strong>
+        </td>
+        <td class="creneau-td-check">${checkbox('ouvertMatinSemaine',     room.ouvertMatinSemaine)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertApresMidiSemaine', room.ouvertApresMidiSemaine)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertNuitSemaine',      room.ouvertNuitSemaine)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertSamediMatin',      room.ouvertSamediMatin)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertSamediApresMidi',  room.ouvertSamediApresMidi)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertSamediNuit',       room.ouvertSamediNuit)}</td>
+        <td class="creneau-td-check">${checkbox('ouvertDimanche',         room.ouvertDimanche)}</td>
+      </tr>`;
+  }).join('');
+}
+

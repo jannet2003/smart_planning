@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, ForeignKey
+from sqlalchemy import Column, Integer, String, Date, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
@@ -18,6 +18,15 @@ class Salle(Base):
     max_inf = Column(Integer, nullable=False, default=1)
     min_tech = Column(Integer, nullable=False, default=1)
     max_tech = Column(Integer, nullable=False, default=3)
+
+    # Disponibilité par créneaux (True = salle ouverte ce créneau)
+    ouvert_matin_semaine      = Column(Boolean, nullable=False, default=True)
+    ouvert_apres_midi_semaine = Column(Boolean, nullable=False, default=True)
+    ouvert_nuit_semaine       = Column(Boolean, nullable=False, default=True)
+    ouvert_samedi_matin       = Column(Boolean, nullable=False, default=True)
+    ouvert_samedi_apres_midi  = Column(Boolean, nullable=False, default=True)
+    ouvert_samedi_nuit        = Column(Boolean, nullable=False, default=True)
+    ouvert_dimanche           = Column(Boolean, nullable=False, default=True)
 
     personnels = relationship("Personnel", secondary="PERSONNEL_SALLE", back_populates="salles")
     compatibilites = relationship(

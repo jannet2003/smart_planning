@@ -25,6 +25,15 @@ class SalleBase(BaseModel):
     broken_end: Optional[str] = ''
     broken_reason: Optional[str] = ''
 
+    # Disponibilité par créneaux (True = salle ouverte ce créneau)
+    ouvert_matin_semaine:      bool = True
+    ouvert_apres_midi_semaine: bool = True
+    ouvert_nuit_semaine:       bool = True
+    ouvert_samedi_matin:       bool = True
+    ouvert_samedi_apres_midi:  bool = True
+    ouvert_samedi_nuit:        bool = True
+    ouvert_dimanche:           bool = True
+
 
 class SalleCreate(SalleBase):
     pass
